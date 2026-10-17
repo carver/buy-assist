@@ -1,5 +1,5 @@
 {%- macro price_line(p) -%}
 ${{ p.item_cents | dollars }}
-{%- if p.shipping_cents is not none %} + {% if p.shipping_estimated %}~{% endif %}${{ p.shipping_cents | dollars }} shipping{% if p.shipping_estimated %} (est.){% endif %}{% else %} + shipping unknown{% endif %}
+{%- if p.shipping_cents is not none %} + {% if p.shipping_estimated %}~{% endif %}${{ p.shipping_cents | dollars }} shipping{% if p.shipping_range %} (est. ${{ p.shipping_range[0] | dollars }}-${{ p.shipping_range[1] | dollars }}){% elif p.shipping_estimated %} (est.){% endif %}{% else %} + shipping unknown{% endif %}
 {%- if p.tax_cents %} + ${{ p.tax_cents | dollars }} tax{% elif p.tax_cents is none %} + tax not set{% endif %} = ${{ p.total_cents | dollars }} all-in
 {%- endmacro -%}

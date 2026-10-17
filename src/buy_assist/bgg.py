@@ -33,6 +33,7 @@ from buy_assist.models import (
 _API = "https://api.geekdo.com/api"
 _GAME_PATH = re.compile(r"/(?:boardgame|boardgameexpansion)/(\d+)(?:/|$)")
 _MIN_INTERVAL_SECONDS = 5.0
+_MAX_MARKET_PAGES = 10
 _EDITION_IN_TITLE = re.compile(r"\(([^()]*)\)\s*$")
 _USER_AGENT = "buy-assist/0.1 (household shopping list)"
 
@@ -123,9 +124,16 @@ class BggApi:
 
     def us_listings(self, game_id: str) -> list[Listing]:
         """Active GeekMarket listings a US buyer can pay for in dollars, cheapest first."""
-        params = {"objectid": game_id, "objecttype": "thing", "pageid": "1"}
-        products = self._get(_ProductsAnswer, "/market/products", params).products
-        listings = [listing for p in products if (listing := p.us_listing())]
+        products: list[_Product] = []
+        game_name: str | None = None
+        for page in range(1, _MAX_MARKET_PAGES + 1):
+            params = {"objectid": game_id, "objecttype": "thing", "pageid": str(page)}
+            answer = self._get(_ProductsAnswer, "/market/products", params)
+            products += answer.products
+            game_name = game_name or (answer.linkeditem.name if answer.linkeditem else None)
+            if not answer.config or page * answer.config.itemsperpage >= answer.config.numitems:
+                break
+        listings = [listing for p in products if (listing := p.us_listing(game_name))]
         return sorted(listings, key=lambda listing: listing.price_cents)
 
     def _get[T: BaseModel](self, answer: type[T], path: str, params: dict[str, str]) -> T:
@@ -287,7 +295,7 @@ class _Product(BaseModel):
     version: _ProductVersion | None = None
     linkeduser: _Seller | None = None
 
-    def us_listing(self) -> Listing | None:
+    def us_listing(self, game_name: str | None) -> Listing | None:
         """This product as a listing, or None unless it's active, in dollars and in the US."""
         if (self.productstate, self.currency, self.itemlocation_code) != ("active", "USD", "US"):
             return None
@@ -303,7 +311,7 @@ class _Product(BaseModel):
         return Listing(
             marketplace=Marketplace.BGG,
             external_id=self.productid,
-            title=title or "GeekMarket listing",
+            title=title or optional_text(game_name) or "GeekMarket listing",
             url=f"https://boardgamegeek.com/market/product/{self.productid}",
             price_cents=round(price * 100),
             is_new=self.conditioncode == "n",
@@ -313,8 +321,19 @@ class _Product(BaseModel):
         )
 
 
+class _LinkedItem(BaseModel):
+    name: str | None = None
+
+
+class _MarketPaging(BaseModel):
+    numitems: int
+    itemsperpage: int
+
+
 class _ProductsAnswer(BaseModel):
     products: list[_Product]
+    linkeditem: _LinkedItem | None = None
+    config: _MarketPaging | None = None
 
 
 class _PriceHistoryAnswer(BaseModel):

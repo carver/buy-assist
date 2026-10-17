@@ -140,3 +140,19 @@ def test_app_runs_the_watch_while_it_is_up(tmp_path: Path) -> None:
             time.sleep(0.05)
 
     assert store.last_run("sold") is not None
+
+
+def test_estimate_with_unknown_origin_shows_its_range(shira: TestClient, store: Store) -> None:
+    item_id = add_item(shira)
+    unknown_origin = Listing(
+        marketplace=Marketplace.BGG,
+        external_id="9",
+        title="EXIT calendar, seller somewhere",
+        url="https://boardgamegeek.com/market/product/9",
+        price_cents=4000,
+        is_new=True,
+        condition="New",
+    )
+    store.record_listings(item_id, Marketplace.BGG, [unknown_origin], SEEN)
+
+    assert "est. $9.00&ndash;$16.00" in shira.get(f"/items/{item_id}").text

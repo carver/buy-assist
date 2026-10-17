@@ -56,7 +56,11 @@ def test_private_sale_full_price_adds_estimated_shipping_and_no_tax() -> None:
     price = full_price(4000, None, ESTIMATE, Decimal("0.08625"), collects_tax=False)
 
     assert price == FullPrice(
-        item_cents=4000, shipping_cents=1630, shipping_estimated=True, tax_cents=0
+        item_cents=4000,
+        shipping_cents=1630,
+        shipping_estimated=True,
+        tax_cents=0,
+        shipping_range=(904, 1630),
     )
     assert price.total_cents == 5630
 

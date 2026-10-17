@@ -59,6 +59,8 @@ class FullPrice:
     shipping_cents: int | None
     shipping_estimated: bool
     tax_cents: int | None
+    shipping_range: tuple[int, int] | None = None
+    """Low and high shipping when the estimate couldn't pin down the seller's zone."""
 
     @property
     def total_cents(self) -> int:
@@ -86,9 +88,13 @@ def full_price(
         tax_cents = None
     else:
         tax_cents = round(item_cents * tax_rate)
+    spread = estimate is not None and estimate.low_cents != estimate.high_cents
     return FullPrice(
         item_cents=item_cents,
         shipping_cents=estimate.typical_cents if estimated and estimate else shipping_cents,
         shipping_estimated=estimated,
         tax_cents=tax_cents,
+        shipping_range=(estimate.low_cents, estimate.high_cents)
+        if estimated and estimate and spread
+        else None,
     )

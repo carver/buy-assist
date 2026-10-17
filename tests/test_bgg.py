@@ -131,3 +131,20 @@ def test_us_listings_are_active_usd_listings_located_in_the_us() -> None:
         origin_state="Louisiana",
     )
     assert {listing.condition for listing in listings} == {"New", "Very Good", "Like New"}
+    assert by_id["3094682"].title == EXIT_TITLE  # no edition given, so the game's name
+
+
+def test_us_listings_read_every_page() -> None:
+    market = json.loads((DATA / "bgg_market_343322.json").read_text())
+    first, second = market["products"][:5], market["products"][5:]
+    pages: list[str] = []
+
+    def paged(request: httpx2.Request) -> httpx2.Response:
+        page = request.url.params["pageid"]
+        pages.append(page)
+        products = first if page == "1" else second
+        config = {"numitems": len(first) + len(second), "itemsperpage": len(first)}
+        return httpx2.Response(200, json=market | {"products": products, "config": config})
+
+    assert len(api(paged).us_listings("343322")) == 4
+    assert pages == ["1", "2"]

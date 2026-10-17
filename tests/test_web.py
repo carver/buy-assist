@@ -295,7 +295,15 @@ def test_weight_and_box_size_are_saved_and_shown(shira: TestClient, store: Store
         12.91,
         2.13,
     )
-    assert "17.76 \u00d7 12.91 \u00d7 2.13 in, 1.88 lb" in shira.get(location).text
+    assert "17.8 \u00d7 12.9 \u00d7 2.1 in, 1.88 lb" in shira.get(location).text
     edit_page = shira.get(f"{location}/edit").text
     assert 'name="weight_lb" inputmode="decimal" value="1.88"' in edit_page
     assert 'value="17.76 x 12.91 x 2.13"' in edit_page
+
+
+def test_item_page_says_why_shipping_is_unknown(shira: TestClient, store: Store) -> None:
+    store.set_home_zip("")
+    location = shira.post("/items", data=item_form(zip=""), follow_redirects=False).headers[
+        "location"
+    ]
+    assert "to see shipping estimates" in shira.get(location).text

@@ -25,6 +25,7 @@
 
 <section>
   <h2>Listings</h2>
+  {% if not (f.zip or home_zip) %}<p class="notice">Set a home ZIP in <a href="/settings">Settings</a> to see shipping estimates.</p>{% endif %}
   {% if listings %}
   <ul class="sales listings">
     {% for recorded, price in listings %}

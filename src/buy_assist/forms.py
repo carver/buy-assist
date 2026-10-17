@@ -50,7 +50,7 @@ class ItemForm:
             variant=item_fields.variant or "",
             zip=item_fields.zip or "",
             weight_lb=format_pounds(item_fields.weight_oz),
-            box_in=format_box(item_fields, " x "),
+            box_in=format_box(item_fields),
             target_price=format_dollars(item_fields.target_price_cents),
             notes=item_fields.notes,
             watcher_ids=item_fields.watcher_ids,
@@ -147,9 +147,16 @@ def parse_box(text: str) -> tuple[float, float, float] | None:
     return (sizes[0], sizes[1], sizes[2])
 
 
-def format_box(fields: ItemFields, separator: str = " \u00d7 ") -> str:
+def format_box(fields: ItemFields, separator: str = " x ") -> str:
+    """The box size as typed into the form."""
     sizes = (fields.length_in, fields.width_in, fields.depth_in)
     return separator.join(f"{s:g}" for s in sizes if s) if all(sizes) else ""
+
+
+def describe_box(fields: ItemFields) -> str:
+    """The box size for reading, to a tenth of an inch: '17.8 \u00d7 12.9 \u00d7 2.1'."""
+    sizes = (fields.length_in, fields.width_in, fields.depth_in)
+    return " \u00d7 ".join(f"{round(s, 1):g}" for s in sizes if s) if all(sizes) else ""
 
 
 def _is_web_url(url: str) -> bool:
