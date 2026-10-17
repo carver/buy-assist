@@ -6,7 +6,8 @@ import httpx2
 import pytest
 
 from buy_assist.bgg import BggApi
-from buy_assist.links import Edition, HttpLinkReader, LinkError, first_url
+from buy_assist.links import HttpLinkReader, LinkError, first_url
+from buy_assist.models import Edition
 from tests.fixtures import BGG_URL, FakeClock, recorded_bgg_api
 
 DATA = Path(__file__).parent / "data"

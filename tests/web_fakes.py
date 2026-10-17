@@ -2,9 +2,9 @@
 
 from datetime import date
 
-from buy_assist.links import Edition, LinkError, LinkFacts
-from buy_assist.models import Condition, ItemFields, Sale, SaleSource
-from buy_assist.parser import ParseError
+from buy_assist.claude import ParseError
+from buy_assist.links import LinkError, LinkFacts
+from buy_assist.models import Condition, Edition, ItemFields, Sale, SaleSource
 from buy_assist.paste import PastedSale
 from buy_assist.sold import SoldPriceError
 from tests.fixtures import BGG_URL, EXIT_NAME

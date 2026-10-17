@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from buy_assist.models import SaleSource
 from buy_assist.store import Store
-from tests.fixtures import BGG_URL
 from tests.web_fakes import (
     PASTED_DOUBT,
     PASTED_MATCH,
@@ -190,7 +189,7 @@ def test_sales_routes_for_unknown_item_are_404(shira: TestClient) -> None:
 def test_search_words_are_saved_and_shown(shira: TestClient) -> None:
     location = add_item(shira, search_query="EXIT advent golden book")
     assert 'value="EXIT advent golden book"' in shira.get(f"{location}/edit").text
-    assert BGG_URL in shira.get(location).text
+    assert "<dd>EXIT advent golden book</dd>" in shira.get(location).text
 
 
 def test_forged_rows_are_checked_again_on_save(shira: TestClient, store: Store) -> None:

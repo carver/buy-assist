@@ -12,8 +12,8 @@ from dataclasses import asdict, replace
 from typing import Any, Protocol
 
 from buy_assist.claude import ParseError, Runner, claude_json
-from buy_assist.links import Edition, LinkFacts, first_url
-from buy_assist.models import Condition, ItemFields, is_upc, optional_text
+from buy_assist.links import LinkFacts, first_url
+from buy_assist.models import Condition, Edition, ItemFields, is_upc, optional_text
 
 _NULLABLE_STRING = {"type": ["string", "null"]}
 

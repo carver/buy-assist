@@ -1,0 +1,3 @@
+{% macro sale_price(sale) -%}
+<span class="price">${{ sale.price_cents | dollars }}{% if sale.shipping_cents %} <small>+ ${{ sale.shipping_cents | dollars }} ship</small>{% elif sale.shipping_cents == 0 %} <small>free ship</small>{% endif %}</span>
+{%- endmacro %}

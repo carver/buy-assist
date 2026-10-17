@@ -40,11 +40,10 @@ def refresh_sales(
     source = services.sold_prices
     try:
         added = record_sales(store, source, item)
-        message = (
-            f"Added {added} new sales from {source.label}."
-            if added
-            else (f"No new sales on {source.label}.")
-        )
+        if added:
+            message = f"Added {added} new sales from {source.label}."
+        else:
+            message = f"No new sales on {source.label}."
     except SoldPriceError as e:
         message = f"Couldn't get sold prices: {e}"
     return item_page(request, me, item, [message])

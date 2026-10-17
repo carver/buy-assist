@@ -2,9 +2,10 @@ from typing import Any
 
 import pytest
 
-from buy_assist.links import Edition, LinkFacts
-from buy_assist.models import Condition, ItemFields
-from buy_assist.parser import ClaudeItemParser, ParseError
+from buy_assist.claude import ParseError
+from buy_assist.links import LinkFacts
+from buy_assist.models import Condition, Edition, ItemFields
+from buy_assist.parser import ClaudeItemParser
 from tests.fixtures import BGG_URL, EXIT_NAME, recorded_bgg_facts
 
 REQUEST = f"EXIT advent calendar golden book, new, under $35 {BGG_URL}"

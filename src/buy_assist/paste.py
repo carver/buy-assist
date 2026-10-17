@@ -6,10 +6,13 @@ here; a row whose price doesn't appear in the paste is taken as invented and dro
 
 import json
 import math
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Protocol
+
+from pydantic import TypeAdapter, ValidationError
 
 from buy_assist.claude import ParseError, Runner, claude_json
 from buy_assist.models import (
@@ -22,6 +25,7 @@ from buy_assist.models import (
 )
 
 _MAX_PASTE_CHARS = 200_000
+_ROWS = TypeAdapter(list[dict[str, Any]])
 
 _SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -94,15 +98,12 @@ class ClaudeSalesParser:
         if len(text) > _MAX_PASTE_CHARS:
             raise ParseError("That's too much to read at once; paste one page of results.")
         answer = self._run(_prompt(text, item), _SCHEMA)
-        rows = answer.get("sales")
-        if not isinstance(rows, list):
-            raise ParseError("Claude's answer has no list of sales")
+        try:
+            rows = _ROWS.validate_python(answer.get("sales"))
+        except ValidationError as e:
+            raise ParseError("Claude's answer has no list of sales") from e
         today = self._today()
-        return [
-            pasted
-            for row in rows  # pyright: ignore[reportUnknownVariableType]
-            if isinstance(row, dict) and (pasted := _pasted_sale(row, text, today))  # pyright: ignore[reportUnknownArgumentType]
-        ]
+        return [pasted for row in rows if (pasted := _pasted_sale(row, text, today))]
 
 
 def _prompt(text: str, item: ItemFields) -> str:
@@ -164,4 +165,5 @@ def _cents(dollars: object, *, allow_zero: bool = False) -> int | None:
 
 def _shown_in(cents: int, text: str) -> bool:
     """Whether the paste shows this dollar amount, as eBay writes it ("$1,234.50")."""
-    return f"{cents // 100:,}.{cents % 100:02d}" in text
+    amount = re.escape(f"{cents // 100:,}.{cents % 100:02d}")
+    return re.search(rf"(?<![\d,.]){amount}(?!\d)", text) is not None

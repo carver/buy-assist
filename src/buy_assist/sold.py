@@ -4,7 +4,7 @@ eBay results come in by hand through the item page (see paste.py)."""
 from typing import Protocol
 
 from buy_assist.bgg import BggApi, BggError, game_id
-from buy_assist.models import ItemFields, Sale
+from buy_assist.models import ItemFields, Sale, SaleSource
 
 
 class SoldPriceError(Exception):
@@ -27,19 +27,23 @@ class SoldPriceSource(Protocol):
 class BggSoldPrices:
     """GeekMarket sales for items whose reference link is a BGG game."""
 
-    label = "BoardGameGeek"
+    label = SaleSource.BGG.label
 
     def __init__(self, bgg: BggApi) -> None:
         self._bgg = bgg
 
     def covers(self, item: ItemFields) -> bool:
-        return item.reference_url is not None and game_id(item.reference_url) is not None
+        return _bgg_id(item) is not None
 
     def sales_for(self, item: ItemFields) -> list[Sale]:
-        bgg_id = game_id(item.reference_url) if item.reference_url else None
+        bgg_id = _bgg_id(item)
         if bgg_id is None:
             return []
         try:
             return self._bgg.sales(bgg_id)
         except BggError as e:
             raise SoldPriceError(str(e)) from e
+
+
+def _bgg_id(item: ItemFields) -> str | None:
+    return game_id(item.reference_url) if item.reference_url else None

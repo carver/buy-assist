@@ -53,6 +53,11 @@ class SaleSource(StrEnum):
     BGG = "bgg"
     EBAY = "ebay"
 
+    @property
+    def label(self) -> str:
+        """The source's name, as shown to people."""
+        return {SaleSource.BGG: "BoardGameGeek", SaleSource.EBAY: "eBay"}[self]
+
 
 @dataclass(frozen=True)
 class Sale:

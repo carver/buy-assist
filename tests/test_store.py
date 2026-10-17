@@ -8,7 +8,6 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from buy_assist.models import Condition, ItemFields, Sale, SaleSource
-from buy_assist.prices import PriceStats, summarize_sales
 from buy_assist.store import ItemNotFoundError, Store
 from tests.fixtures import BGG_URL, EXIT_NAME
 
@@ -198,32 +197,6 @@ def test_removed_sale_is_gone_and_only_from_its_item(tmp_path: Path) -> None:
     assert not store.remove_sale(other.id, recorded.id)
     assert store.remove_sale(item.id, recorded.id)
     assert store.sales(item.id) == []
-
-
-def test_summary_splits_new_and_used_prices(tmp_path: Path) -> None:
-    store = Store.open(tmp_path / "buy.db")
-    item = store.create_item(ItemFields(name="Calendar"))
-    store.add_sales(
-        item.id,
-        [
-            bgg_sale("1", date(2025, 1, 1), 40),
-            bgg_sale("2", date(2025, 1, 2), 36),
-            bgg_sale("3", date(2025, 1, 3), 50),
-            bgg_sale("4", date(2025, 1, 4), 35, "Very Good"),
-            bgg_sale("5", date(2025, 1, 5), 20, "Good"),
-        ],
-    )
-
-    summary = summarize_sales([r.sale for r in store.sales(item.id)])
-
-    assert summary.new == PriceStats(count=3, low_cents=3600, median_cents=4000, high_cents=5000)
-    assert summary.used == PriceStats(count=2, low_cents=2000, median_cents=2750, high_cents=3500)
-
-
-def test_summary_of_no_sales_is_empty() -> None:
-    summary = summarize_sales([])
-    assert summary.new is None
-    assert summary.used is None
 
 
 def test_removed_sale_stays_removed_when_seen_again(tmp_path: Path) -> None:

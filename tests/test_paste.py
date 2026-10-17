@@ -3,8 +3,8 @@ from typing import Any
 
 import pytest
 
+from buy_assist.claude import ParseError
 from buy_assist.models import Condition, ItemFields, Sale, SaleSource
-from buy_assist.parser import ParseError
 from buy_assist.paste import ClaudeSalesParser, PastedSale
 from tests.fixtures import DATA, EXIT_NAME
 

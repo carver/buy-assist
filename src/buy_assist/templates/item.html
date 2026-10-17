@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros.html" import sale_price %}
 {% block title %}{{ item.fields.name }} · Buy Assistant{% endblock %}
 {% block main %}
 {% set f = item.fields %}
@@ -55,9 +56,9 @@
     {% set sale = recorded.sale %}
     <li>
       <div class="sale-head">
-        <span class="price">${{ sale.price_cents | dollars }}{% if sale.shipping_cents %} <small>+ ${{ sale.shipping_cents | dollars }} ship</small>{% elif sale.shipping_cents == 0 %} <small>free ship</small>{% endif %}</span>
+        {{ sale_price(sale) }}
         <span>{{ sale.condition }}</span>
-        <span class="aside">{{ sale.sold_on.strftime("%b %-d, %Y") }} · {{ "BoardGameGeek" if sale.source.value == "bgg" else "eBay" }}</span>
+        <span class="aside">{{ sale.sold_on.strftime("%b %-d, %Y") }} · {{ sale.source.label }}</span>
         <form method="post" action="/items/{{ item.id }}/sales/{{ recorded.id }}/remove" hx-confirm="Remove this sale?">
           <button class="link">remove</button>
         </form>
