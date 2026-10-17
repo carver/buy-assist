@@ -357,6 +357,10 @@ class Store:
                     (key, value),
                 )
 
+    def ship_to(self, item: ItemFields) -> str | None:
+        """Where an item gets delivered: its own ZIP, else home."""
+        return item.zip or self.home_zip()
+
     def home_zip(self) -> str | None:
         with self._connect() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'home_zip'").fetchone()

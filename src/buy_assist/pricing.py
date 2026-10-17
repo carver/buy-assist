@@ -40,7 +40,7 @@ class UspsQuoter:
         self._rates = UspsRates.load()
 
     def quote(self, item: ItemFields, origin: Origin) -> ShippingEstimate | None:
-        ship_to = item.zip or self._store.home_zip()
+        ship_to = self._store.ship_to(item)
         chart = self._chart(ship_to[:3]) if ship_to else None
         if chart is None:
             return None
@@ -102,5 +102,5 @@ class Pricer:
         )
 
     def _tax_rate(self, item: ItemFields) -> Decimal | None:
-        ship_to = item.zip or self._store.home_zip()
+        ship_to = self._store.ship_to(item)
         return self._store.tax_rate(ship_to) if ship_to else None
