@@ -1,42 +1,22 @@
 """Household settings, and which reference-link sites have their own reader."""
 
-from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from buy_assist.domains import reference_domains
 from buy_assist.forms import ZIP_ERROR
-from buy_assist.links import DEDICATED_DOMAINS
 from buy_assist.models import User, is_zip
 from buy_assist.web.pages import Me, StoreDep, render, store_of
 
 router = APIRouter()
 
-READER_WORTHWHILE_ITEMS = 3
-"""Items linking to one domain before a dedicated reader for it is worth writing."""
-
-
-@dataclass(frozen=True)
-class ReferenceDomain:
-    domain: str
-    item_count: int
-    reader: str | None
-
-    @property
-    def wants_reader(self) -> bool:
-        """Enough items link here that a dedicated reader would pay off."""
-        return self.reader is None and self.item_count >= READER_WORTHWHILE_ITEMS
-
 
 def _settings_page(
     request: Request, me: User, home_zip: str, errors: list[str], status_code: int = 200
 ) -> HTMLResponse:
-    counts = store_of(request).reference_domain_counts()
-    domains = [
-        ReferenceDomain(domain, count, DEDICATED_DOMAINS.get(domain))
-        for domain, count in sorted(counts.items(), key=lambda dc: (-dc[1], dc[0]))
-    ]
+    domains = reference_domains(store_of(request))
     return render(
         request,
         "settings.html",

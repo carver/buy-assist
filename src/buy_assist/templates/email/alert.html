@@ -1,0 +1,10 @@
+{% from "email/_price.txt" import price_line %}<div style="font-family: system-ui, sans-serif; max-width: 36rem">
+<h2 style="font-size: 1.15rem">{% if item_url %}<a href="{{ item_url }}">{{ item.name }}</a>{% else %}{{ item.name }}{% endif %}</h2>
+{% for line in lines %}
+<p style="margin: 1rem 0 0.25rem"><strong>{{ line.heading }}</strong></p>
+<p style="margin: 0"><a href="{{ line.listing.listing.url }}">{{ line.listing.listing.title }}</a><br>
+{{ price_line(line.price) }}<br>
+<span style="color: #6b665e">{{ line.listing.listing.condition }} · {{ line.listing.listing.marketplace.label }}</span></p>
+{% endfor %}
+{% if first_found %}<p style="color: #6b665e">The rest will come in your daily digest.</p>{% endif %}
+</div>

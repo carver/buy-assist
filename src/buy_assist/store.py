@@ -334,6 +334,13 @@ class Store:
             ).fetchall()
         return {NoticeKind(row["kind"]) for row in rows}
 
+    def reminded_domains(self) -> set[str]:
+        """Reference-link domains someone has already been told deserve a reader."""
+        return set(json.loads(self._setting("reminded_domains") or "[]"))
+
+    def set_reminded_domains(self, domains: set[str]) -> None:
+        self._set_setting("reminded_domains", json.dumps(sorted(domains)))
+
     def _setting(self, key: str) -> str | None:
         with self._connect() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()

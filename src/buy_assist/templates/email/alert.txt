@@ -1,0 +1,13 @@
+{% from "email/_price.txt" import price_line %}{{ subject }}
+{% for line in lines %}
+{{ line.heading }}
+{{ line.listing.listing.title }}
+{{ price_line(line.price) }}
+{{ line.listing.listing.condition }} · {{ line.listing.listing.marketplace.label }} · {{ line.listing.listing.url }}
+{% endfor %}
+{%- if first_found %}
+The rest will come in your daily digest.
+{% endif %}
+{%- if item_url %}
+Item page: {{ item_url }}
+{% endif %}
