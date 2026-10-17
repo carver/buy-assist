@@ -28,7 +28,13 @@ An item has:
 
 ### Reference links
 
-Claude reads any reference link the same way and pulls out name, edition, UPC and an image. The app counts how many items use each link domain. Once a domain reaches 3 uses, Jason's digest and the settings page say it's worth writing a dedicated extractor for that site. BoardGameGeek is the likely first one. Its XML API lists editions, but they carry publisher product codes rather than UPCs, and it needs a registered app token (see `docs/research/apis.md`).
+The first link in an item request is its reference link. The app reads the page behind it, then Claude reads the request with what the page said as context.
+
+Most sites get the generic reader. It fetches the page (public hosts only), takes any JSON-LD product data (name, GTIN, MPN, image), and passes the visible text to Claude. If a site blocks the fetch, the draft comes from the typed text alone and the form says so.
+
+BoardGameGeek has its own reader, since its pages sit behind a Cloudflare challenge. It uses the JSON API the BGG site itself calls (`api.geekdo.com`), at most one request every 5 seconds. BGG lists a game's editions, so the form offers them as a dropdown; picking one fills in that edition's title and publisher product code. BGG editions carry product codes, not UPCs. Once BGG approves our app, the reader can move to the official XML API (see `docs/research/apis.md`).
+
+The settings page counts items per reference-link domain. A domain with 3 or more items and no dedicated reader gets flagged as worth writing one; Jason's digest will carry the same reminder.
 
 Test fixture: [EXIT: The Game Advent Calendar: The Hunt for the Golden Book](https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol).
 

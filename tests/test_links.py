@@ -1,12 +1,12 @@
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import httpx2
 import pytest
 
-from buy_assist.links import Edition, LinkError, LinkReader, first_url
-from tests.fixtures import BGG_URL
+from buy_assist.links import Edition, HttpLinkReader, LinkError, first_url
+from tests.fixtures import BGG_URL, recorded_bgg_api
 
 DATA = Path(__file__).parent / "data"
 PUBLIC_IP = "93.184.215.14"
@@ -27,9 +27,9 @@ class FakeClock:
         self.now += seconds
 
 
-def reader(handler: Handler, clock: FakeClock | None = None, ip: str = PUBLIC_IP) -> LinkReader:
+def reader(handler: Handler, clock: FakeClock | None = None, ip: str = PUBLIC_IP) -> HttpLinkReader:
     clock = clock or FakeClock()
-    return LinkReader(
+    return HttpLinkReader(
         httpx2.Client(transport=httpx2.MockTransport(handler)),
         resolve=lambda host: [ip],
         clock=clock.time,
@@ -40,11 +40,7 @@ def reader(handler: Handler, clock: FakeClock | None = None, ip: str = PUBLIC_IP
 def bgg_api(request: httpx2.Request) -> httpx2.Response:
     assert request.url.host == "api.geekdo.com"
     assert request.url.params["objectid"] == "343322"
-    if request.url.path == "/api/geekitems":
-        return httpx2.Response(200, content=(DATA / "bgg_thing_343322.json").read_bytes())
-    if request.url.path == "/api/geekitem/linkeditems":
-        return httpx2.Response(200, content=(DATA / "bgg_versions_343322.json").read_bytes())
-    return httpx2.Response(404)
+    return recorded_bgg_api(request)
 
 
 def shop_page(request: httpx2.Request) -> httpx2.Response:
@@ -192,11 +188,11 @@ def test_private_hosts_are_refused_without_a_request(ip: str) -> None:
 
 def test_redirect_to_private_host_is_refused() -> None:
     def redirect(request: httpx2.Request) -> httpx2.Response:
-        if request.url.host == "shop.example":
+        if request.headers["host"] == "shop.example":
             return httpx2.Response(302, headers={"location": "http://internal.example/"})
         return httpx2.Response(200, text="<p>secret</p>", headers={"content-type": "text/html"})
 
-    links = LinkReader(
+    links = HttpLinkReader(
         httpx2.Client(transport=httpx2.MockTransport(redirect)),
         resolve=lambda host: [PUBLIC_IP] if host == "shop.example" else ["10.1.2.3"],
     )
@@ -220,6 +216,104 @@ def test_non_http_url_is_link_error() -> None:
 
 @pytest.mark.live
 def test_live_bgg_reads_fixture_game() -> None:
-    facts = LinkReader(httpx2.Client(timeout=20)).read(BGG_URL)
+    facts = HttpLinkReader(httpx2.Client(timeout=20)).read(BGG_URL)
     assert "Golden Book" in (facts.name or "")
     assert any(e.product_code == "681951" for e in facts.editions)
+
+
+def test_bgg_editions_sharing_a_name_get_their_year() -> None:
+    names = [e.name for e in reader(bgg_api).read(BGG_URL).editions]
+
+    assert len(set(names)) == len(names) == 7
+    assert "Dutch edition (2023)" in names
+    assert "Dutch edition (2025)" in names
+    assert "English edition" in names
+
+
+def test_page_is_fetched_from_the_address_that_was_checked() -> None:
+    seen: list[httpx2.Request] = []
+
+    def record(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return shop_page(request)
+
+    reader(record).read("https://shop.example/skillet")
+
+    [request] = seen
+    assert request.url.host == PUBLIC_IP
+    assert request.url.path == "/skillet"
+    assert request.headers["host"] == "shop.example"
+    assert request.extensions["sni_hostname"] == "shop.example"
+
+
+def test_host_with_any_private_address_is_refused() -> None:
+    links = HttpLinkReader(
+        httpx2.Client(transport=httpx2.MockTransport(shop_page)),
+        resolve=lambda host: [PUBLIC_IP, "127.0.0.1"],
+    )
+    with pytest.raises(LinkError):
+        links.read("https://shop.example/skillet")
+
+
+def test_redirect_loop_is_link_error() -> None:
+    def loop(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(302, headers={"location": "/again"})
+
+    with pytest.raises(LinkError, match="redirects too many times"):
+        reader(loop).read("https://shop.example/start")
+
+
+def test_oversized_page_is_link_error() -> None:
+    def huge(request: httpx2.Request) -> httpx2.Response:
+        chunks = (b"<p>" + b"x" * 1_000_000 for _ in range(5))
+        return httpx2.Response(200, content=chunks, headers={"content-type": "text/html"})
+
+    with pytest.raises(LinkError, match="too big"):
+        reader(huge).read("https://shop.example/huge")
+
+
+def test_slow_page_hits_overall_deadline() -> None:
+    clock = FakeClock()
+
+    def trickle(request: httpx2.Request) -> httpx2.Response:
+        def chunks() -> Iterator[bytes]:
+            for _ in range(10):
+                clock.now += 5
+                yield b"<p>slow</p>"
+
+        return httpx2.Response(200, content=chunks(), headers={"content-type": "text/html"})
+
+    with pytest.raises(LinkError, match="too long"):
+        reader(trickle, clock).read("https://shop.example/slow")
+
+
+def test_non_html_page_is_refused_before_its_body_is_read() -> None:
+    read_chunks: list[int] = []
+
+    def pdf(request: httpx2.Request) -> httpx2.Response:
+        def chunks() -> Iterator[bytes]:
+            read_chunks.append(1)
+            yield b"%PDF"
+
+        return httpx2.Response(200, content=chunks(), headers={"content-type": "application/pdf"})
+
+    with pytest.raises(LinkError):
+        reader(pdf).read("https://shop.example/manual.pdf")
+    assert read_chunks == []
+
+
+@pytest.mark.parametrize("image", ["data:image/png;base64,AAAA", "javascript:alert(1)"])
+def test_page_image_that_is_not_a_web_link_is_dropped(image: str) -> None:
+    def page(request: httpx2.Request) -> httpx2.Response:
+        html = f'<html><head><meta property="og:image" content="{image}"></head><p>x</p></html>'
+        return httpx2.Response(200, text=html, headers={"content-type": "text/html"})
+
+    assert reader(page).read("https://shop.example/x").image_url is None
+
+
+@pytest.mark.live
+def test_live_generic_page_is_read_through_pinned_connection() -> None:
+    facts = HttpLinkReader(httpx2.Client(timeout=20)).read("https://example.com/")
+    assert facts.source == "example.com"
+    assert facts.page_text is not None
+    assert "Example Domain" in facts.page_text

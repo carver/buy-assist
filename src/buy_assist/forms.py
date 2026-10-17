@@ -20,6 +20,7 @@ class ItemForm:
     epid: str = ""
     model_number: str = ""
     reference_url: str = ""
+    image_url: str = ""
     variant: str = ""
     zip: str = ""
     target_price: str = ""
@@ -39,6 +40,7 @@ class ItemForm:
             epid=item_fields.epid or "",
             model_number=item_fields.model_number or "",
             reference_url=item_fields.reference_url or "",
+            image_url=item_fields.image_url or "",
             variant=item_fields.variant or "",
             zip=item_fields.zip or "",
             target_price=format_dollars(item_fields.target_price_cents),
@@ -58,8 +60,11 @@ class ItemForm:
         if self.upc.strip() and not is_upc(self.upc.strip()):
             errors.append("UPC must be 8 to 14 digits.")
         url = self.reference_url.strip()
-        if url and not url.startswith(("http://", "https://")):
+        if url and not _is_web_url(url):
             errors.append("Reference link must start with http:// or https://.")
+        image_url = self.image_url.strip()
+        if image_url and not _is_web_url(image_url):
+            errors.append("Image link must start with http:// or https://.")
         target_price_cents = parse_dollars(self.target_price)
         if self.target_price.strip() and target_price_cents is None:
             errors.append("Target price must be a dollar amount, like 35 or 35.50.")
@@ -76,6 +81,7 @@ class ItemForm:
             epid=optional_text(self.epid),
             model_number=optional_text(self.model_number),
             reference_url=optional_text(url),
+            image_url=optional_text(image_url),
             variant=optional_text(self.variant),
             zip=optional_text(self.zip),
             target_price_cents=target_price_cents,
@@ -93,3 +99,7 @@ def parse_dollars(text: str) -> int | None:
     if not match:
         return None
     return int(Decimal(match.group(1)) * 100)
+
+
+def _is_web_url(url: str) -> bool:
+    return url.startswith(("http://", "https://"))

@@ -7,6 +7,7 @@ the draft before saving.
 
 import json
 import math
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import asdict
@@ -42,7 +43,7 @@ guess identifiers.
 - upc, epid, model_number: only when written in the note or the link.
 - variant: size, color or edition, if given.
 - edition: when the link lists editions, the one the note asks for (by language, \
-publisher or year); null if the note doesn't say.
+publisher or year). If several fit, pick the newest. Null if the note doesn't say.
 - target_price_dollars: the most they want to pay, if given.
 - notes: any other wishes from the note, briefly; empty string if none."""
 
@@ -113,16 +114,16 @@ class ClaudeItemParser:
         if not isinstance(name, str) or not isinstance(notes, str):
             raise ParseError("Claude's answer is missing a name or notes")
         edition = _pick_edition(editions, answer.get("edition"))
-        upc = optional_text(answer.get("upc"))
-        upc_sources = [text, link.upc or "", link.page_text or ""] if link else [text]
-        if not (upc and is_upc(upc) and any(upc in s for s in upc_sources)):
+        sources = [text, *(_link_texts(link) if link else [])]
+        upc = _stated(answer.get("upc"), sources)
+        if not (upc and is_upc(upc)):
             upc = link.upc if link else None
-        model_number = optional_text(answer.get("model_number"))
+        model_number = _stated(answer.get("model_number"), sources)
         return ItemFields(
             name=(edition and edition.title) or (link and link.name) or name.strip(),
             condition=_condition(answer.get("condition")),
             upc=upc,
-            epid=optional_text(answer.get("epid")),
+            epid=_stated(answer.get("epid"), sources),
             model_number=(edition.product_code if edition else model_number)
             or (link and link.model_number),
             reference_url=first_url(text),
@@ -131,6 +132,33 @@ class ClaudeItemParser:
             target_price_cents=_cents(answer.get("target_price_dollars")),
             notes=notes.strip(),
         )
+
+
+def draft_from_link(text: str, link: LinkFacts | None) -> ItemFields:
+    """A draft from the link alone, for when Claude can't read the request."""
+    edition = _pick_edition(link.editions, None) if link else None
+    return ItemFields(
+        name=(edition and edition.title) or (link and link.name) or "",
+        upc=link.upc if link else None,
+        model_number=(edition and edition.product_code) or (link and link.model_number),
+        reference_url=first_url(text),
+        image_url=link.image_url if link else None,
+        variant=edition.name if edition else None,
+        notes=text,
+    )
+
+
+def _link_texts(link: LinkFacts) -> list[str]:
+    return [t for t in (link.upc, link.model_number, link.page_text) if t]
+
+
+def _stated(value: object, sources: list[str]) -> str | None:
+    """Claude's identifier, kept only when it appears whole in the request or linked page."""
+    text = optional_text(value)
+    if text is None:
+        return None
+    pattern = re.compile(rf"(?<![\w-]){re.escape(text)}(?![\w-])")
+    return text if any(pattern.search(source) for source in sources) else None
 
 
 def _prompt(text: str, link: LinkFacts | None) -> str:

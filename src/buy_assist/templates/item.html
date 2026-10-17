@@ -3,6 +3,7 @@
 {% block main %}
 {% set f = item.fields %}
 <h1>{{ f.name }}</h1>
+{% if f.image_url %}<img src="{{ f.image_url }}" alt="" class="photo">{% endif %}
 {% if not item.is_open %}<p class="notice">Closed {{ item.closed_at.strftime("%b %-d, %Y") }}</p>{% endif %}
 <dl class="facts">
   <dt>Target</dt><dd>{% if f.target_price_cents is not none %}${{ f.target_price_cents | dollars }} all-in{% else %}not set yet{% endif %}</dd>

@@ -10,4 +10,22 @@
   <input id="home_zip" name="home_zip" inputmode="numeric" value="{{ home_zip }}" required>
   <button>Save</button>
 </form>
+
+<h2>Reference links</h2>
+{% if domains %}
+<table class="domains">
+  <thead><tr><th>Site</th><th>Items</th><th>Reader</th></tr></thead>
+  <tbody>
+    {% for d in domains %}
+    <tr>
+      <td>{{ d.domain }}</td>
+      <td class="num">{{ d.item_count }}</td>
+      <td>{% if d.reader %}{{ d.reader }} reader{% elif d.wants_reader %}<strong>generic, worth writing a reader</strong>{% else %}generic{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No items have reference links yet.</p>
+{% endif %}
 {% endblock %}

@@ -5,7 +5,7 @@ import pytest
 from buy_assist.links import Edition, LinkFacts
 from buy_assist.models import Condition, ItemFields
 from buy_assist.parser import ClaudeItemParser, ParseError
-from tests.fixtures import BGG_URL, EXIT_NAME
+from tests.fixtures import BGG_URL, EXIT_NAME, recorded_bgg_facts
 
 REQUEST = f"EXIT advent calendar golden book, new, under $35 {BGG_URL}"
 
@@ -218,9 +218,11 @@ def test_link_facts_reach_claude_as_data_with_edition_choices() -> None:
 @pytest.mark.live
 def test_live_claude_picks_edition_from_bgg_facts() -> None:
     draft = ClaudeItemParser().parse(
-        f"EXIT golden book advent calendar in German please {BGG_URL}", BGG_FACTS
+        f"EXIT golden book advent calendar in Dutch please {BGG_URL}", recorded_bgg_facts()
     )
-    assert draft.variant == "German edition"
+    assert draft.variant is not None
+    assert draft.variant.startswith("Dutch edition")
+    assert draft.model_number == "999-EXI22"
 
 
 @pytest.mark.live
@@ -231,3 +233,28 @@ def test_live_claude_parses_bgg_request() -> None:
     assert draft.reference_url == BGG_URL
     assert draft.condition is Condition.NEW
     assert draft.target_price_cents == 3500
+
+
+def test_upc_inside_a_longer_number_is_not_found() -> None:
+    draft = parser_answering(answer(upc="12345678")).parse(f"{REQUEST} order 9912345678")
+    assert draft.upc is None
+
+
+def test_drops_model_number_and_epid_found_nowhere() -> None:
+    draft = parser_answering(answer(model_number="XK-9", epid="2254799")).parse(REQUEST)
+    assert draft.model_number is None
+    assert draft.epid is None
+
+
+def test_keeps_model_number_and_epid_written_in_request() -> None:
+    draft = parser_answering(answer(model_number="XK-9", epid="2254799")).parse(
+        f"{REQUEST} model XK-9 epid 2254799"
+    )
+    assert draft.model_number == "XK-9"
+    assert draft.epid == "2254799"
+
+
+def test_no_edition_and_no_english_edition_leaves_edition_unset() -> None:
+    facts = LinkFacts(source="BoardGameGeek", name="Calendar", editions=(GERMAN,))
+    draft = parser_answering(answer(edition=None)).parse(REQUEST, facts)
+    assert draft.variant is None

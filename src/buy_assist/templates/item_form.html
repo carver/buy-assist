@@ -2,11 +2,14 @@
 {% block title %}{{ form.name or "Item" }} · Buy Assistant{% endblock %}
 {% block main %}
 <h1>{{ "Check the details" if item_id is none else "Edit item" }}</h1>
-{% if message %}<p class="notice">{{ message }}</p>{% endif %}
+{% for message in messages %}<p class="notice">{{ message }}</p>{% endfor %}
 {% if errors %}
 <ul class="errors">{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
 {% endif %}
 <form method="post" action="{{ "/items" if item_id is none else "/items/%d" % item_id }}" class="stack">
+  {% if form.image_url %}<img src="{{ form.image_url }}" alt="" class="photo">{% endif %}
+  <input type="hidden" name="image_url" value="{{ form.image_url }}">
+
   <label for="name">Name</label>
   <input id="name" name="name" value="{{ form.name }}" required>
 
@@ -28,8 +31,19 @@
     </div>
   </div>
 
+  {% if editions %}
+  <label for="variant">Edition</label>
+  <input type="hidden" name="editions" value="{{ editions_json }}">
+  <select id="variant" name="variant" class="edition-picker">
+    {% if form.variant not in editions | map(attribute="name") %}<option value="" selected>Choose an edition</option>{% endif %}
+    {% for edition in editions %}
+    <option value="{{ edition.name }}" data-title="{{ edition.title }}" data-product-code="{{ edition.product_code or "" }}"{% if edition.name == form.variant %} selected{% endif %}>{{ edition.name }}{% if edition.year %} · {{ edition.year }}{% endif %}{% if edition.publishers %} · {{ edition.publishers | join(", ") }}{% endif %}</option>
+    {% endfor %}
+  </select>
+  {% else %}
   <label for="variant">Variant <small>size, color, edition</small></label>
   <input id="variant" name="variant" value="{{ form.variant }}">
+  {% endif %}
 
   <div class="row">
     <div>

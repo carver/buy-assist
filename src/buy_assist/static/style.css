@@ -92,3 +92,12 @@ button.secondary { background: transparent; color: var(--text); border-color: va
 
 .busy { display: none; }
 .htmx-request .busy { display: inline; }
+
+.photo { display: block; max-width: 100%; max-height: 16rem; border-radius: 6px; margin: 0 0 1rem; }
+.thumb { width: 2.5rem; height: 2.5rem; object-fit: cover; border-radius: 4px; flex: none; align-self: center; }
+span.thumb { background: var(--line); }
+
+.domains { border-collapse: collapse; width: 100%; }
+.domains th, .domains td { text-align: left; padding: 0.4rem 0.5rem 0.4rem 0; border-bottom: 1px solid var(--line); }
+.domains th { color: var(--muted); font-weight: 500; }
+.domains .num { font-variant-numeric: tabular-nums; }

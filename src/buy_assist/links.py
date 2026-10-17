@@ -11,8 +11,10 @@ import re
 import socket
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Protocol
 from urllib.parse import urljoin, urlsplit
 
 import httpx2
@@ -28,6 +30,7 @@ _BGG_API = "https://api.geekdo.com/api"
 _BGG_MIN_INTERVAL_SECONDS = 5.0
 _MAX_REDIRECTS = 5
 _MAX_PAGE_BYTES = 3_000_000
+_PAGE_DEADLINE_SECONDS = 20.0
 _MAX_PAGE_TEXT = 6000
 _USER_AGENT = "buy-assist/0.1 (household shopping list)"
 
@@ -62,6 +65,12 @@ class LinkFacts:
     page_text: str | None = None
 
 
+class LinkReader(Protocol):
+    def read(self, url: str) -> LinkFacts:
+        """What the page at `url` says about its product. Raises LinkError."""
+        ...
+
+
 def first_url(text: str) -> str | None:
     match = _URL.search(text)
     return match.group(0).rstrip(_TRAILING_PUNCTUATION) if match else None
@@ -92,7 +101,7 @@ class _Throttle:
             self._last = self._clock()
 
 
-class LinkReader:
+class HttpLinkReader:
     def __init__(
         self,
         client: httpx2.Client,
@@ -103,6 +112,7 @@ class LinkReader:
     ) -> None:
         self._client = client
         self._resolve = resolve
+        self._clock = clock
         self._bgg_throttle = _Throttle(_BGG_MIN_INTERVAL_SECONDS, clock, sleep)
 
     def read(self, url: str) -> LinkFacts:
@@ -140,8 +150,8 @@ class LinkReader:
         return LinkFacts(
             source=DEDICATED_DOMAINS["boardgamegeek.com"],
             name=optional_text(game.name),
-            image_url=optional_text(game.imageurl),
-            editions=tuple(e for v in versions.items if (e := v.edition())),
+            image_url=_web_url(game.imageurl),
+            editions=_distinct_names([e for v in versions.items if (e := v.edition())]),
         )
 
     def _bgg_get[T: BaseModel](self, answer: type[T], path: str, params: dict[str, str]) -> T:
@@ -160,52 +170,88 @@ class LinkReader:
             raise LinkError("BoardGameGeek's answer wasn't what this app expects.") from e
 
     def _read_page(self, url: str) -> LinkFacts:
-        response = self._fetch_public(url)
-        content_type = response.headers.get("content-type", "")
-        if "html" not in content_type:
-            raise LinkError("That link isn't a web page.")
-        return _page_facts(
-            url_domain(str(response.url)) or "web page", str(response.url), response.text
-        )
+        page = self._fetch_public(url)
+        return _page_facts(url_domain(page.url) or "web page", page.url, page.html)
 
-    def _fetch_public(self, url: str) -> httpx2.Response:
-        """GET a page, following redirects only to hosts on the public internet."""
+    def _fetch_public(self, url: str) -> _Page:
+        """GET an HTML page from a public host, following redirects only to public hosts."""
+        deadline = self._clock() + _PAGE_DEADLINE_SECONDS
         for _ in range(_MAX_REDIRECTS + 1):
-            self._refuse_private_host(url)
+            request = self._pinned_request(url, deadline)
             try:
-                with self._client.stream(
-                    "GET", url, headers={"user-agent": _USER_AGENT}, follow_redirects=False
-                ) as response:
+                response = self._client.send(request, stream=True, follow_redirects=False)
+                try:
                     if response.is_redirect and "location" in response.headers:
                         url = urljoin(url, response.headers["location"])
                         continue
                     if response.status_code != 200:
                         raise LinkError(f"The site answered {response.status_code}.")
-                    body = bytearray()
-                    for chunk in response.iter_bytes():
-                        body += chunk
-                        if len(body) > _MAX_PAGE_BYTES:
-                            raise LinkError("That page is too big to read.")
+                    if "html" not in response.headers.get("content-type", ""):
+                        raise LinkError("That link isn't a web page.")
+                    body = self._read_body(response, deadline)
+                finally:
+                    response.close()
             except httpx2.HTTPError as e:
                 raise LinkError(f"The site didn't answer ({type(e).__name__}).") from e
-            return httpx2.Response(
-                response.status_code,
-                headers=response.headers,
-                content=bytes(body),
-                request=response.request,
-            )
+            return _Page(url, body.decode(response.encoding or "utf-8", errors="replace"))
         raise LinkError("That link redirects too many times.")
 
-    def _refuse_private_host(self, url: str) -> None:
+    def _pinned_request(self, url: str, deadline: float) -> httpx2.Request:
+        """A request that connects to the exact address checked here, so a second DNS answer
+        can't send it somewhere private."""
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise LinkError("Only http and https links can be read.")
+        address = self._public_address(parts.hostname)
+        return self._client.build_request(
+            "GET",
+            httpx2.URL(url).copy_with(host=address),
+            headers={"host": parts.netloc.rpartition("@")[2], "user-agent": _USER_AGENT},
+            extensions={"sni_hostname": parts.hostname},
+            timeout=max(deadline - self._clock(), 0.1),
+        )
+
+    def _public_address(self, host: str) -> str:
         try:
-            addresses = self._resolve(parts.hostname)
+            addresses = self._resolve(host)
         except OSError as e:
             raise LinkError("That site's name doesn't resolve.") from e
         if not addresses or any(not ipaddress.ip_address(a).is_global for a in addresses):
             raise LinkError("That link points at a private network address.")
+        return addresses[0]
+
+    def _read_body(self, response: httpx2.Response, deadline: float) -> bytes:
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            body += chunk
+            if len(body) > _MAX_PAGE_BYTES:
+                raise LinkError("That page is too big to read.")
+            if self._clock() > deadline:
+                raise LinkError("That page took too long to load.")
+        return bytes(body)
+
+
+@dataclass(frozen=True)
+class _Page:
+    url: str
+    html: str
+
+
+def _distinct_names(editions: list[Edition]) -> tuple[Edition, ...]:
+    """Add the year to editions whose names repeat, so a name picks out one edition."""
+    counts = Counter(e.name for e in editions)
+    renamed = [
+        replace(e, name=f"{e.name} ({e.year})") if counts[e.name] > 1 and e.year else e
+        for e in editions
+    ]
+    seen: Counter[str] = Counter()
+    distinct: list[Edition] = []
+    for edition in renamed:
+        seen[edition.name] += 1
+        if seen[edition.name] > 1:
+            edition = replace(edition, name=f"{edition.name} #{seen[edition.name]}")
+        distinct.append(edition)
+    return tuple(distinct)
 
 
 class _BggLink(BaseModel):
@@ -262,14 +308,21 @@ def _page_facts(source: str, url: str, html: str) -> LinkFacts:
         text = f"{og_title}\n{text}"
     upc = _first_text(product, "gtin12", "gtin13", "gtin", "gtin14", "gtin8")
     image = _image(product.get("image")) or og_image
+    image_url = urljoin(url, image) if image else None
     return LinkFacts(
         source=source,
         name=optional_text(product.get("name")),
-        image_url=urljoin(url, image) if image else None,
+        image_url=_web_url(image_url),
         upc=upc if upc and is_upc(upc) else None,
         model_number=_first_text(product, "mpn", "sku"),
         page_text=text[:_MAX_PAGE_TEXT] or None,
     )
+
+
+def _web_url(url: str | None) -> str | None:
+    """`url` if it's an http(s) link, else None."""
+    url = optional_text(url)
+    return url if url and urlsplit(url).scheme in ("http", "https") else None
 
 
 def _json_ld_product(soup: BeautifulSoup) -> dict[str, Json]:

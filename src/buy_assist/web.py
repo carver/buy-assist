@@ -1,7 +1,7 @@
 """The household web app: pick who you are, add items, view and edit them."""
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -9,10 +9,12 @@ from fastapi import APIRouter, Cookie, Depends, FastAPI, Form, HTTPException, Re
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import TypeAdapter, ValidationError
 
 from buy_assist.forms import ZIP_ERROR, ItemForm, format_dollars
-from buy_assist.models import Condition, Item, User, is_zip
-from buy_assist.parser import ItemParser, ParseError
+from buy_assist.links import DEDICATED_DOMAINS, Edition, LinkError, LinkReader, first_url
+from buy_assist.models import Condition, Item, User, is_zip, url_domain
+from buy_assist.parser import ItemParser, ParseError, draft_from_link
 from buy_assist.store import Store
 
 _PACKAGE_DIR = Path(__file__).parent
@@ -25,14 +27,27 @@ _templates.env.filters["dollars"] = format_dollars  # pyright: ignore[reportUnkn
 router = APIRouter()
 
 
-def create_app(db_path: Path, parser: ItemParser) -> FastAPI:
+def create_app(db_path: Path, parser: ItemParser, links: LinkReader) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = Store.open(db_path)
     app.state.parser = parser
+    app.state.links = links
     app.mount("/static", StaticFiles(directory=_PACKAGE_DIR / "static"), name="static")
     app.add_exception_handler(_NoIdentity, _ask_identity)
     app.include_router(router)
     return app
+
+
+@dataclass(frozen=True)
+class ReferenceDomain:
+    domain: str
+    item_count: int
+    reader: str | None
+
+    @property
+    def wants_reader(self) -> bool:
+        """Enough items link here that a dedicated reader would pay off."""
+        return self.reader is None and self.item_count >= 3
 
 
 class _NoIdentity(Exception):
@@ -51,8 +66,13 @@ def _parser(request: Request) -> ItemParser:
     return request.app.state.parser
 
 
+def _links(request: Request) -> LinkReader:
+    return request.app.state.links
+
+
 StoreDep = Annotated[Store, Depends(_store)]
 ParserDep = Annotated[ItemParser, Depends(_parser)]
+LinksDep = Annotated[LinkReader, Depends(_links)]
 
 
 def _current_user(store: StoreDep, user_id: Annotated[str | None, Cookie()] = None) -> User:
@@ -83,6 +103,23 @@ async def _submitted_item_form(request: Request) -> ItemForm:
 
 SubmittedForm = Annotated[ItemForm, Depends(_submitted_item_form)]
 
+_EDITIONS = TypeAdapter(tuple[Edition, ...])
+
+
+async def _submitted_editions(request: Request) -> tuple[Edition, ...]:
+    """The editions the draft form offered, carried along so a failed save can offer them
+    again. It's display data from the person's own browser, so a bad value just drops it."""
+    editions = (await request.form()).get("editions")
+    if not isinstance(editions, str) or not editions:
+        return ()
+    try:
+        return _EDITIONS.validate_json(editions)
+    except ValidationError:
+        return ()
+
+
+SubmittedEditions = Annotated[tuple[Edition, ...], Depends(_submitted_editions)]
+
 
 def _ids(values: Sequence[object]) -> frozenset[int]:
     """Parse submitted ids, dropping anything that isn't a number."""
@@ -108,7 +145,8 @@ def _item_form_page(
     *,
     item_id: int | None,
     errors: list[str] | None = None,
-    message: str | None = None,
+    messages: list[str] | None = None,
+    editions: tuple[Edition, ...] = (),
 ) -> HTMLResponse:
     return _page(
         request,
@@ -118,17 +156,24 @@ def _item_form_page(
         form=form,
         item_id=item_id,
         errors=errors or [],
-        message=message,
+        messages=messages or [],
+        editions=editions,
+        editions_json=_EDITIONS.dump_json(editions).decode() if editions else "",
         home_zip=_store(request).home_zip(),
     )
 
 
 def _save(
-    request: Request, store: Store, me: User, form: ItemForm, item_id: int | None
+    request: Request,
+    store: Store,
+    me: User,
+    form: ItemForm,
+    item_id: int | None,
+    editions: tuple[Edition, ...] = (),
 ) -> Response:
     result = form.validate({u.id for u in store.users()})
     if isinstance(result, list):
-        return _item_form_page(request, me, form, item_id=item_id, errors=result)
+        return _item_form_page(request, me, form, item_id=item_id, errors=result, editions=editions)
     item = store.create_item(result) if item_id is None else store.update_item(item_id, result)
     return RedirectResponse(f"/items/{item.id}", status_code=303)
 
@@ -162,21 +207,36 @@ def new_item(request: Request, me: Me) -> HTMLResponse:
 
 @router.post("/items/draft")
 def draft_item(
-    request: Request, store: StoreDep, parser: ParserDep, me: Me, text: Annotated[str, Form()]
+    request: Request, parser: ParserDep, links: LinksDep, me: Me, text: Annotated[str, Form()]
 ) -> HTMLResponse:
+    messages: list[str] = []
+    link = None
+    if url := first_url(text):
+        try:
+            link = links.read(url)
+            messages.append(f"Read from {link.source}.")
+        except LinkError as e:
+            site = url_domain(url) or url
+            messages.append(f"Couldn't read {site}: {e} Details come from your text.")
     try:
-        draft = parser.parse(text)
+        draft = parser.parse(text, link)
     except ParseError:
-        form = ItemForm(notes=text, watcher_ids=frozenset({me.id}))
-        message = "Claude couldn't read that, so fill it in by hand."
-        return _item_form_page(request, me, form, item_id=None, message=message)
+        draft = draft_from_link(text, link)
+        messages.append("Claude couldn't read your note, so fill in the rest by hand.")
     form = ItemForm.from_fields(replace(draft, watcher_ids=frozenset({me.id})))
-    return _item_form_page(request, me, form, item_id=None)
+    editions = link.editions if link else ()
+    return _item_form_page(request, me, form, item_id=None, messages=messages, editions=editions)
 
 
 @router.post("/items")
-def create_item(request: Request, store: StoreDep, me: Me, form: SubmittedForm) -> Response:
-    return _save(request, store, me, form, None)
+def create_item(
+    request: Request,
+    store: StoreDep,
+    me: Me,
+    form: SubmittedForm,
+    editions: SubmittedEditions,
+) -> Response:
+    return _save(request, store, me, form, None, editions)
 
 
 @router.get("/items/{item_id}")
@@ -202,9 +262,28 @@ def close_item(store: StoreDep, me: Me, item: ExistingItem) -> Response:
     return RedirectResponse(f"/items/{item.id}", status_code=303)
 
 
+def _settings_page(
+    request: Request, me: User, home_zip: str, errors: list[str], status_code: int = 200
+) -> HTMLResponse:
+    counts = _store(request).reference_domain_counts()
+    domains = [
+        ReferenceDomain(domain, count, DEDICATED_DOMAINS.get(domain))
+        for domain, count in sorted(counts.items(), key=lambda dc: (-dc[1], dc[0]))
+    ]
+    return _page(
+        request,
+        "settings.html",
+        me,
+        status_code=status_code,
+        home_zip=home_zip,
+        errors=errors,
+        domains=domains,
+    )
+
+
 @router.get("/settings")
 def settings(request: Request, store: StoreDep, me: Me) -> HTMLResponse:
-    return _page(request, "settings.html", me, home_zip=store.home_zip() or "", errors=[])
+    return _settings_page(request, me, store.home_zip() or "", [])
 
 
 @router.post("/settings")
@@ -212,9 +291,6 @@ def save_settings(
     request: Request, store: StoreDep, me: Me, home_zip: Annotated[str, Form()]
 ) -> Response:
     if not is_zip(home_zip.strip()):
-        errors = [ZIP_ERROR]
-        return _page(
-            request, "settings.html", me, status_code=422, home_zip=home_zip, errors=errors
-        )
+        return _settings_page(request, me, home_zip, [ZIP_ERROR], status_code=422)
     store.set_home_zip(home_zip.strip())
     return RedirectResponse("/settings", status_code=303)

@@ -1,8 +1,10 @@
 import argparse
 from pathlib import Path
 
+import httpx2
 import uvicorn
 
+from buy_assist.links import HttpLinkReader
 from buy_assist.parser import ClaudeItemParser
 from buy_assist.web import create_app
 
@@ -14,4 +16,5 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=6767)
     args = parser.parse_args()
     args.db.parent.mkdir(parents=True, exist_ok=True)
-    uvicorn.run(create_app(args.db, ClaudeItemParser()), host=args.host, port=args.port)
+    app = create_app(args.db, ClaudeItemParser(), HttpLinkReader(httpx2.Client(timeout=20)))
+    uvicorn.run(app, host=args.host, port=args.port)
