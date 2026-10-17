@@ -18,8 +18,8 @@ from buy_assist.claude import ParseError, Runner, claude_json
 from buy_assist.models import (
     SALE_TITLE_LIMIT,
     ItemFields,
+    Marketplace,
     Sale,
-    SaleSource,
     checked_sale,
     optional_text,
 )
@@ -137,7 +137,7 @@ def _pasted_sale(row: dict[str, Any], text: str, today: date) -> PastedSale | No
         return None
     sale = checked_sale(
         Sale(
-            source=SaleSource.EBAY,
+            source=Marketplace.EBAY,
             sold_on=sold_on,
             price_cents=price_cents,
             shipping_cents=shipping_cents,

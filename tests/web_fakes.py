@@ -4,7 +4,7 @@ from datetime import date
 
 from buy_assist.claude import ParseError
 from buy_assist.links import LinkError, LinkFacts
-from buy_assist.models import Condition, Edition, ItemFields, Sale, SaleSource
+from buy_assist.models import Condition, Edition, ItemFields, Marketplace, Sale
 from buy_assist.paste import PastedSale
 from buy_assist.sold import SoldPriceError
 from tests.fixtures import BGG_URL, EXIT_NAME
@@ -65,7 +65,7 @@ class FakeLinkReader:
 
 
 NEW_SALE = Sale(
-    source=SaleSource.BGG,
+    source=Marketplace.BGG,
     source_id="2070310",
     sold_on=date(2025, 11, 18),
     price_cents=4000,
@@ -74,7 +74,7 @@ NEW_SALE = Sale(
     title="New in excellent condition",
 )
 USED_SALE = Sale(
-    source=SaleSource.BGG,
+    source=Marketplace.BGG,
     source_id="1802529",
     sold_on=date(2023, 5, 4),
     price_cents=3500,
@@ -104,7 +104,7 @@ class FakeSoldPrices:
 
 PASTED_MATCH = PastedSale(
     sale=Sale(
-        source=SaleSource.EBAY,
+        source=Marketplace.EBAY,
         sold_on=date(2025, 10, 12),
         price_cents=3299,
         shipping_cents=585,
@@ -117,7 +117,7 @@ PASTED_MATCH = PastedSale(
 )
 PASTED_DOUBT = PastedSale(
     sale=Sale(
-        source=SaleSource.EBAY,
+        source=Marketplace.EBAY,
         sold_on=date(2025, 9, 3),
         price_cents=400,
         shipping_cents=125,

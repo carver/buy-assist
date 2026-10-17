@@ -21,8 +21,8 @@ from pydantic import BaseModel, ValidationError
 
 from buy_assist.models import (
     Edition,
+    Marketplace,
     Sale,
-    SaleSource,
     checked_sale,
     optional_text,
     url_domain,
@@ -247,7 +247,7 @@ class _MarketSale(BaseModel):
             return None
         condition = optional_text(self.condition) or "Unknown"
         sale = Sale(
-            source=SaleSource.BGG,
+            source=Marketplace.BGG,
             source_id=self.itemid,
             sold_on=sold_at.date(),
             price_cents=round(price * 100),

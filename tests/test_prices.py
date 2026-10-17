@@ -1,12 +1,12 @@
 from datetime import date
 
-from buy_assist.models import Sale, SaleSource
+from buy_assist.models import Marketplace, Sale
 from buy_assist.prices import PriceStats, summarize_sales
 
 
 def sale(dollars: int, *, is_new: bool) -> Sale:
     return Sale(
-        source=SaleSource.BGG,
+        source=Marketplace.BGG,
         sold_on=date(2025, 1, 1),
         price_cents=dollars * 100,
         is_new=is_new,

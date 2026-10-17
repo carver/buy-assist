@@ -13,9 +13,9 @@ from buy_assist.models import (
     Condition,
     Item,
     ItemFields,
+    Marketplace,
     RecordedSale,
     Sale,
-    SaleSource,
     User,
     url_domain,
 )
@@ -221,7 +221,7 @@ def _recorded_sale(row: sqlite3.Row) -> RecordedSale:
         id=row["id"],
         item_id=row["item_id"],
         sale=Sale(
-            source=SaleSource(row["source"]),
+            source=Marketplace(row["source"]),
             sold_on=date.fromisoformat(row["sold_on"]),
             price_cents=row["price_cents"],
             is_new=bool(row["is_new"]),

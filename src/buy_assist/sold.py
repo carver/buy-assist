@@ -4,7 +4,7 @@ eBay results come in by hand through the item page (see paste.py)."""
 from typing import Protocol
 
 from buy_assist.bgg import BggApi, BggError, game_id
-from buy_assist.models import ItemFields, Sale, SaleSource
+from buy_assist.models import ItemFields, Marketplace, Sale
 
 
 class SoldPriceError(Exception):
@@ -27,7 +27,7 @@ class SoldPriceSource(Protocol):
 class BggSoldPrices:
     """GeekMarket sales for items whose reference link is a BGG game."""
 
-    label = SaleSource.BGG.label
+    label = Marketplace.BGG.label
 
     def __init__(self, bgg: BggApi) -> None:
         self._bgg = bgg

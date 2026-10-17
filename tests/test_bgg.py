@@ -6,7 +6,7 @@ import httpx2
 import pytest
 
 from buy_assist.bgg import BggApi, BggError, game_id
-from buy_assist.models import Sale, SaleSource
+from buy_assist.models import Marketplace, Sale
 from tests.fixtures import BGG_URL, DATA, FakeClock, recorded_bgg_api
 
 
@@ -38,7 +38,7 @@ def test_sales_are_usd_geekmarket_sales_newest_first() -> None:
 
     assert len(sales) == 5
     assert sales[0] == Sale(
-        source=SaleSource.BGG,
+        source=Marketplace.BGG,
         source_id="2070310",
         sold_on=date(2025, 11, 18),
         price_cents=4000,

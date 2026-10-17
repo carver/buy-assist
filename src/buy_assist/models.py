@@ -53,21 +53,21 @@ class Edition:
     depth_in: float | None = None
 
 
-class SaleSource(StrEnum):
+class Marketplace(StrEnum):
     BGG = "bgg"
     EBAY = "ebay"
 
     @property
     def label(self) -> str:
         """The source's name, as shown to people."""
-        return {SaleSource.BGG: "BoardGameGeek", SaleSource.EBAY: "eBay"}[self]
+        return {Marketplace.BGG: "BoardGameGeek", Marketplace.EBAY: "eBay"}[self]
 
 
 @dataclass(frozen=True)
 class Sale:
     """A completed sale seen somewhere, used as evidence of what an item really sells for."""
 
-    source: SaleSource
+    source: Marketplace
     sold_on: date
     price_cents: int
     is_new: bool

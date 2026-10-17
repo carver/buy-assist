@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import TypeAdapter, ValidationError
 
 from buy_assist.claude import ParseError
-from buy_assist.models import Item, Sale, SaleSource, checked_sale
+from buy_assist.models import Item, Marketplace, Sale, checked_sale
 from buy_assist.paste import PastedSale
 from buy_assist.sold import SoldPriceError, SoldPriceSource
 from buy_assist.store import Store
@@ -83,7 +83,7 @@ async def save_pasted_sales(
     chosen = {int(v) for v in form.getlist("selected") if isinstance(v, str) and v.isdecimal()}
     pasted = (
         Sale(
-            source=SaleSource.EBAY,
+            source=Marketplace.EBAY,
             sold_on=sale.sold_on,
             price_cents=sale.price_cents,
             shipping_cents=sale.shipping_cents,

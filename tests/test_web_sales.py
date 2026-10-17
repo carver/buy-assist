@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
-from buy_assist.models import SaleSource
+from buy_assist.models import Marketplace
 from buy_assist.store import Store
 from tests.web_fakes import (
     PASTED_DOUBT,
@@ -160,7 +160,7 @@ def test_saved_rows_are_always_ebay_sales(shira: TestClient, store: Store) -> No
     shira.post(f"{location}/sales/save", data={"rows": json.dumps(forged), "selected": ["0"]})
 
     saved = [r.sale for r in store.sales(item_id) if r.sale.title == "forged"]
-    assert [(s.source, s.source_id) for s in saved] == [(SaleSource.EBAY, None)]
+    assert [(s.source, s.source_id) for s in saved] == [(Marketplace.EBAY, None)]
 
 
 def test_tampered_rows_are_rejected(shira: TestClient) -> None:
@@ -220,5 +220,5 @@ def test_forged_rows_are_checked_again_on_save(shira: TestClient, store: Store) 
     )
 
     assert response.status_code == 303
-    titles = [r.sale.title for r in store.sales(item_id) if r.sale.source is SaleSource.EBAY]
+    titles = [r.sale.title for r in store.sales(item_id) if r.sale.source is Marketplace.EBAY]
     assert titles == ["x" * 300]

@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from buy_assist.models import Condition, ItemFields, Sale, SaleSource
+from buy_assist.models import Condition, ItemFields, Marketplace, Sale
 from buy_assist.store import ItemNotFoundError, Store
 from tests.fixtures import BGG_URL, EXIT_NAME
 
@@ -132,7 +132,7 @@ def test_reference_domains_count_open_and_closed_items(tmp_path: Path) -> None:
 
 def bgg_sale(source_id: str, sold_on: date, dollars: int, condition: str = "New") -> Sale:
     return Sale(
-        source=SaleSource.BGG,
+        source=Marketplace.BGG,
         source_id=source_id,
         sold_on=sold_on,
         price_cents=dollars * 100,
@@ -143,7 +143,7 @@ def bgg_sale(source_id: str, sold_on: date, dollars: int, condition: str = "New"
 
 def ebay_sale(sold_on: date, dollars: int, title: str, shipping: int | None = None) -> Sale:
     return Sale(
-        source=SaleSource.EBAY,
+        source=Marketplace.EBAY,
         sold_on=sold_on,
         price_cents=dollars * 100,
         shipping_cents=None if shipping is None else shipping * 100,

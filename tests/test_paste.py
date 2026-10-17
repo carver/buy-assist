@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from buy_assist.claude import ParseError
-from buy_assist.models import Condition, ItemFields, Sale, SaleSource
+from buy_assist.models import Condition, ItemFields, Marketplace, Sale
 from buy_assist.paste import ClaudeSalesParser, PastedSale
 from tests.fixtures import DATA, EXIT_NAME
 
@@ -36,7 +36,7 @@ def test_rows_become_ebay_sales() -> None:
 
     assert pasted == PastedSale(
         sale=Sale(
-            source=SaleSource.EBAY,
+            source=Marketplace.EBAY,
             sold_on=date(2025, 10, 12),
             price_cents=3299,
             shipping_cents=585,
