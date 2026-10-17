@@ -36,6 +36,21 @@ class ItemFields:
 
 
 @dataclass(frozen=True)
+class ItemDraft:
+    """What Claude read out of a free-text request. A person reviews it before saving."""
+
+    name: str
+    condition: Condition = Condition.ANY
+    upc: str | None = None
+    epid: str | None = None
+    model_number: str | None = None
+    reference_url: str | None = None
+    variant: str | None = None
+    target_price_cents: int | None = None
+    notes: str = ""
+
+
+@dataclass(frozen=True)
 class Item:
     id: int
     fields: ItemFields
