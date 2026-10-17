@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from buy_assist.links import LinkFacts
 from buy_assist.models import Condition, ItemFields
 from buy_assist.parser import ParseError
 from buy_assist.store import Store
@@ -16,7 +17,7 @@ class FakeParser:
         self.requests: list[str] = []
         self.fail = False
 
-    def parse(self, text: str) -> ItemFields:
+    def parse(self, text: str, link: LinkFacts | None = None) -> ItemFields:
         self.requests.append(text)
         if self.fail:
             raise ParseError("claude-json exited 1")
