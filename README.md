@@ -86,11 +86,11 @@ Moving to a real server should mean copying the code and the SQLite file, then a
 
 Needs an eBay developer account for API keys.
 
-Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 8000.
+Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 6767.
 
 ## Development
 
-`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff. Pyright and the tests are too slow for that hook, so they live in `scripts/agent-pre-commit`. To have agents' commits run it, link it in with `ln -s ../../scripts/agent-pre-commit .git/hooks/agent-pre-commit` and run `agent-commit-gate --install .`. Run it by hand before your own commits.
+`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff. Pyright and the tests are too slow for that hook, so they live in `scripts/agent-pre-commit`. To have agents' commits run it, link it in with `ln -s ../../scripts/agent-pre-commit .git/hooks/agent-pre-commit` and run `agent-commit-gate --install .`. Run it by hand before your own commits. CI runs the same checks on pushes to main and on pull requests.
 
 ## Build order
 

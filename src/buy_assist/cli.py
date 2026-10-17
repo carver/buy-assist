@@ -11,7 +11,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Buy Assistant web app.")
     parser.add_argument("--db", type=Path, default=Path("data/buy.db"), help="SQLite file")
     parser.add_argument("--host", default="0.0.0.0", help="address to listen on")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=6767)
     args = parser.parse_args()
     args.db.parent.mkdir(parents=True, exist_ok=True)
     uvicorn.run(create_app(args.db, ClaudeItemParser()), host=args.host, port=args.port)
