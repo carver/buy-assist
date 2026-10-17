@@ -10,6 +10,7 @@ from buy_assist.store import Store
 from tests.web_fakes import (
     PASTED_DOUBT,
     PASTED_MATCH,
+    FakeListingSource,
     FakeSalesParser,
     FakeSoldPrices,
     item_form,
@@ -222,3 +223,15 @@ def test_forged_rows_are_checked_again_on_save(shira: TestClient, store: Store) 
     assert response.status_code == 303
     titles = [r.sale.title for r in store.sales(item_id) if r.sale.source is Marketplace.EBAY]
     assert titles == ["x" * 300]
+
+
+def test_new_item_gets_listings_right_after_saving(
+    client: TestClient, store: Store, listing_source: FakeListingSource
+) -> None:
+    shira = store.users()[1]
+    client.post("/whoami", data={"user_id": str(shira.id)})
+
+    location = add_item(client)
+
+    assert listing_source.calls == 1
+    assert "EXIT calendar listing" in client.get(location).text

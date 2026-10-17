@@ -136,7 +136,7 @@ def test_app_runs_the_watch_while_it_is_up(tmp_path: Path) -> None:
 
     with TestClient(create_app(db, services, watch_every=timedelta(hours=1))):
         deadline = time.monotonic() + 5
-        while store.last_run("fetch") is None and time.monotonic() < deadline:
+        while store.last_run("sold") is None and time.monotonic() < deadline:
             time.sleep(0.05)
 
-    assert store.last_run("fetch") is not None
+    assert store.last_run("sold") is not None

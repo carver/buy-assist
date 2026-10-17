@@ -8,6 +8,7 @@ from buy_assist.store import Store
 from buy_assist.web import Services, create_app
 from tests.web_fakes import (
     FakeLinkReader,
+    FakeListingSource,
     FakeParser,
     FakeSalesParser,
     FakeSoldPrices,
@@ -43,12 +44,18 @@ def sales_parser() -> FakeSalesParser:
 
 
 @pytest.fixture
+def listing_source() -> FakeListingSource:
+    return FakeListingSource()
+
+
+@pytest.fixture
 def client(
     store: Store,
     parser: FakeParser,
     links: FakeLinkReader,
     sold: FakeSoldPrices,
     sales_parser: FakeSalesParser,
+    listing_source: FakeListingSource,
     tmp_path: Path,
 ) -> Iterator[TestClient]:
     services = Services(
@@ -56,7 +63,7 @@ def client(
         links=links,
         sold_prices=sold,
         sales_parser=sales_parser,
-        listing_sources=[],
+        listing_sources=[listing_source],
         shipping=FixedQuoter(),
         mailer=None,
     )

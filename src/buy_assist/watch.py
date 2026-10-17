@@ -3,7 +3,8 @@
 `Watch.tick` runs every hour. Each job checks when it last succeeded, so a sandbox that was
 off catches up on its first tick back. Instant alerts are worked out from what's stored, not
 from what one fetch changed, and the notice log stops repeats; an email that fails to send is
-tried again next tick.
+tried again next tick. Delivery is at least once: a send that finishes just as the app shuts
+down, before its notice is logged, goes out again on the next start.
 """
 
 import logging
@@ -33,6 +34,9 @@ DIGEST_TIME = time(11, 30)
 FETCH_EVERY = timedelta(hours=24)
 SOLD_REFRESH_EVERY = timedelta(days=7)
 NEW_LOW_MIN_DATA_POINTS = 5
+FIRST_FOUND_WINDOW = timedelta(days=2)
+"""How soon after an item's first listing turns up a "first listing found" alert still makes
+sense. Later, say for a watcher added weeks on, the digest covers it instead."""
 REMINDER_RECIPIENT = "Jason"
 """Who hears that a reference-link site deserves its own reader."""
 
@@ -72,7 +76,7 @@ class _AlertLine:
 
     listing: RecordedListing
     price: FullPrice
-    kinds: list[NoticeKind]
+    kinds: tuple[NoticeKind, ...]
 
     @property
     def heading(self) -> str:
@@ -82,11 +86,12 @@ class _AlertLine:
 def _alert_lines(reasons: list[_Reason]) -> list[_AlertLine]:
     """Reasons grouped by listing, most important first."""
     ordered = sorted(reasons, key=lambda r: list(_HEADINGS).index(r.kind))
-    lines: dict[int, _AlertLine] = {}
+    kinds: dict[int, list[NoticeKind]] = {}
+    first: dict[int, _Reason] = {}
     for reason in ordered:
-        line = lines.setdefault(reason.listing.id, _AlertLine(reason.listing, reason.price, []))
-        line.kinds.append(reason.kind)
-    return list(lines.values())
+        kinds.setdefault(reason.listing.id, []).append(reason.kind)
+        first.setdefault(reason.listing.id, reason)
+    return [_AlertLine(r.listing, r.price, tuple(kinds[i])) for i, r in first.items()]
 
 
 @dataclass(frozen=True)
@@ -101,6 +106,12 @@ class _DigestEntry:
     item: Item
     item_url: str | None
     lines: list[_DigestLine]
+
+
+@dataclass(frozen=True)
+class _Recipient:
+    user: User
+    email: str
 
 
 class Watch:
@@ -121,47 +132,35 @@ class Watch:
 
     def tick(self, now: datetime) -> None:
         items = self._store.list_items(open_items=True)
-        if self._due("fetch", now, FETCH_EVERY) and self._fetch_listings(items, now):
-            self._store.set_last_run("fetch", now)
-        if self._due("sold", now, SOLD_REFRESH_EVERY):
-            self._refresh_sold(items)
+        for item in items:
+            if self._due(_fetch_job(item), now, FETCH_EVERY):
+                fetch_listings(self._store, self._sources, item, now)
+        if self._due("sold", now, SOLD_REFRESH_EVERY) and self._refresh_sold(items):
             self._store.set_last_run("sold", now)
         if self._mailer is None:
             return
         for item in items:
             self._send_alerts(self._mailer, item, now)
-        if self._digest_due(now) and self._send_digests(self._mailer, items, now):
-            self._store.set_last_run("digest", now)
+        if now.astimezone(PACIFIC).time() >= DIGEST_TIME:
+            self._send_digests(self._mailer, items, now)
 
     def _due(self, job: str, now: datetime, every: timedelta) -> bool:
         last = self._store.last_run(job)
         return last is None or now - last >= every
 
-    def _fetch_listings(self, items: Iterable[Item], now: datetime) -> bool:
-        """Look for every open item. True unless every lookup failed."""
+    def _refresh_sold(self, items: Iterable[Item]) -> bool:
+        """Refresh sold prices for every item a source covers. True unless every one failed."""
         tried = failed = 0
-        for item in items:
-            for source in self._sources:
-                if not source.covers(item.fields):
-                    continue
-                tried += 1
-                try:
-                    found = source.listings_for(item.fields)
-                except ListingError as e:
-                    failed += 1
-                    _log.warning("%s listings for item %d: %s", source.label, item.id, e)
-                    continue
-                self._store.record_listings(item.id, source.marketplace, found, now)
-        return tried == 0 or failed < tried
-
-    def _refresh_sold(self, items: Iterable[Item]) -> None:
         for item in items:
             if not self._sold.covers(item.fields):
                 continue
+            tried += 1
             try:
                 self._store.add_sales(item.id, self._sold.sales_for(item.fields))
             except SoldPriceError as e:
+                failed += 1
                 _log.warning("%s sold prices for item %d: %s", self._sold.label, item.id, e)
+        return tried == 0 or failed < tried
 
     def _priced(self, item: Item) -> list[_Priced]:
         """Every listing ever seen for the item, priced in full, cheapest first."""
@@ -176,10 +175,12 @@ class Watch:
         if not priced:
             return
         sale_totals = [
-            self._pricer.sale(item.fields, r.sale).total_cents for r in self._store.sales(item.id)
+            price.total_cents
+            for r in self._store.sales(item.id)
+            if (price := self._pricer.sale(item.fields, r.sale)).complete
         ]
-        for user in self._recipients(item):
-            reasons = self._reasons(item, user, priced, sale_totals)
+        for recipient in self._recipients(item):
+            reasons = self._reasons(item, recipient.user, priced, sale_totals, now)
             if not reasons:
                 continue
             lines = _alert_lines(reasons)
@@ -191,21 +192,29 @@ class Watch:
                 "first_found": any(r.kind is NoticeKind.FIRST_FOUND for r in reasons),
                 "item_url": self._item_url(item),
             }
-            if self._send(mailer, user, subject, "alert", context):
+            if self._send(mailer, recipient, subject, "alert", context):
                 for reason in reasons:
-                    self._store.log_notice(reason.listing.id, user.id, reason.kind, now)
+                    self._store.log_notice(reason.listing.id, recipient.user.id, reason.kind, now)
 
     def _reasons(
-        self, item: Item, user: User, priced: list[_Priced], sale_totals: list[int]
+        self,
+        item: Item,
+        user: User,
+        priced: list[_Priced],
+        sale_totals: list[int],
+        now: datetime,
     ) -> list[_Reason]:
+        """Why this person should hear about the item's listings now. A price with unknown
+        shipping or tax can't be at target or a new low: it's only a lower bound."""
         noticed = {p.listing.id: self._store.noticed(p.listing.id, user.id) for p in priced}
         active = [p for p in priced if p.listing.ended_at is None]
         reasons: list[_Reason] = []
-        if active and not any(noticed.values()):
+        first_seen = min(p.listing.first_seen for p in priced)
+        if active and now - first_seen <= FIRST_FOUND_WINDOW and not any(noticed.values()):
             cheapest = active[0]
             reasons.append(_Reason(NoticeKind.FIRST_FOUND, cheapest.listing, cheapest.price))
         target = item.fields.target_price_cents
-        for p in active:
+        for p in (p for p in active if p.price.complete):
             seen = noticed[p.listing.id]
             if (
                 target is not None
@@ -214,7 +223,9 @@ class Watch:
             ):
                 reasons.append(_Reason(NoticeKind.AT_TARGET, p.listing, p.price))
             earlier = [
-                q.price.total_cents for q in priced if q.listing.first_seen < p.listing.first_seen
+                q.price.total_cents
+                for q in priced
+                if q.listing.first_seen < p.listing.first_seen and q.price.complete
             ] + sale_totals
             if (
                 len(earlier) >= NEW_LOW_MIN_DATA_POINTS
@@ -224,25 +235,21 @@ class Watch:
                 reasons.append(_Reason(NoticeKind.NEW_LOW, p.listing, p.price))
         return reasons
 
-    def _digest_due(self, now: datetime) -> bool:
-        local = now.astimezone(PACIFIC)
-        if local.time() < DIGEST_TIME:
-            return False
-        last = self._store.last_run("digest")
-        return last is None or last.astimezone(PACIFIC).date() < local.date()
-
-    def _send_digests(self, mailer: Mailer, items: list[Item], now: datetime) -> bool:
-        """Each person's digest. True if every one that had something to say went out."""
+    def _send_digests(self, mailer: Mailer, items: list[Item], now: datetime) -> None:
+        """Today's digest for everyone who hasn't had one yet today. Each person's day is
+        tracked on its own, so one failed send can't double anyone else's digest."""
+        today = now.astimezone(PACIFIC).date()
         wanted = [d for d in reference_domains(self._store) if d.wants_reader]
         reminded = self._store.reminded_domains()
-        all_sent = True
-        for user in self._store.users():
-            if not user.email:
+        for recipient in self._everyone_with_email():
+            job = f"digest:{recipient.user.id}"
+            last = self._store.last_run(job)
+            if last is not None and last.astimezone(PACIFIC).date() >= today:
                 continue
-            entries = self._digest_entries(user, items)
+            entries = self._digest_entries(recipient.user, items)
             reminders = (
-                wanted
-                if user.name == REMINDER_RECIPIENT and {d.domain for d in wanted} - reminded
+                [d for d in wanted if d.domain not in reminded]
+                if recipient.user.name == REMINDER_RECIPIENT
                 else []
             )
             if not entries and not reminders:
@@ -253,17 +260,20 @@ class Watch:
                 "entries": entries,
                 "reminders": reminders,
             }
-            if not self._send(mailer, user, subject, "digest", context):
-                all_sent = False
+            if not self._send(mailer, recipient, subject, "digest", context):
                 continue
+            self._store.set_last_run(job, now)
             for entry in entries:
                 for line in entry.lines:
-                    self._store.log_notice(line.listing.id, user.id, NoticeKind.DIGEST, now)
+                    self._store.log_notice(
+                        line.listing.id, recipient.user.id, NoticeKind.DIGEST, now
+                    )
             if reminders:
-                self._store.set_reminded_domains(reminded | {d.domain for d in reminders})
-        return all_sent
+                reminded |= {d.domain for d in reminders}
+                self._store.set_reminded_domains(reminded)
 
     def _digest_entries(self, user: User, items: list[Item]) -> list[_DigestEntry]:
+        """New listings per item: ones this person hasn't heard about in any way yet."""
         entries: list[_DigestEntry] = []
         for item in items:
             if user.id not in item.fields.watcher_ids:
@@ -273,36 +283,67 @@ class Watch:
             lines = [
                 _DigestLine(p.listing, p.price, _rank(p.price.total_cents, totals))
                 for p in priced
-                if p.listing.ended_at is None
-                and NoticeKind.DIGEST not in self._store.noticed(p.listing.id, user.id)
+                if p.listing.ended_at is None and not self._store.noticed(p.listing.id, user.id)
             ]
             if lines:
                 entries.append(_DigestEntry(item, self._item_url(item), lines))
         return entries
 
-    def _recipients(self, item: Item) -> list[User]:
-        return [u for u in self._store.users() if u.id in item.fields.watcher_ids and u.email]
+    def _everyone_with_email(self) -> list[_Recipient]:
+        return [_Recipient(u, u.email) for u in self._store.users() if u.email]
+
+    def _recipients(self, item: Item) -> list[_Recipient]:
+        return [r for r in self._everyone_with_email() if r.user.id in item.fields.watcher_ids]
 
     def _item_url(self, item: Item) -> str | None:
         address = self._store.app_address()
         return f"{address.rstrip('/')}/items/{item.id}" if address else None
 
     def _send(
-        self, mailer: Mailer, user: User, subject: str, template: str, context: dict[str, object]
+        self,
+        mailer: Mailer,
+        recipient: _Recipient,
+        subject: str,
+        template: str,
+        context: dict[str, object],
     ) -> bool:
-        assert user.email is not None
         text = _EMAIL_TEMPLATES.get_template(f"email/{template}.txt").render(context)
         html = _EMAIL_TEMPLATES.get_template(f"email/{template}.html").render(context)
         try:
-            mailer.send(user.email, subject, text, html)
+            mailer.send(recipient.email, subject, text, html)
         except MailerError as e:
-            _log.warning("Mail to %s: %s", user.name, e)
+            _log.warning("Mail to %s: %s", recipient.user.name, e)
             return False
         return True
 
 
+def fetch_listings(
+    store: Store, sources: Sequence[ListingSource], item: Item, now: datetime
+) -> None:
+    """Look for an item in every source that covers it, and record what's there. A look
+    where every source failed isn't recorded, so the next tick tries again."""
+    tried = failed = 0
+    for source in sources:
+        if not source.covers(item.fields):
+            continue
+        tried += 1
+        try:
+            found = source.listings_for(item.fields)
+        except ListingError as e:
+            failed += 1
+            _log.warning("%s listings for item %d: %s", source.label, item.id, e)
+            continue
+        store.record_listings(item.id, source.marketplace, found, now)
+    if tried == 0 or failed < tried:
+        store.set_last_run(_fetch_job(item), now)
+
+
+def _fetch_job(item: Item) -> str:
+    return f"fetch:{item.id}"
+
+
 def _rank(total: int, totals: list[int]) -> str:
-    """'cheapest of 14 seen, median $62.00', or '3rd of 14 seen, ...'."""
+    """'cheapest of 14 seen, median $62.00', or '#3 of 14 seen, ...'."""
     place = sum(1 for t in totals if t < total) + 1
     where = "cheapest" if place == 1 else f"#{place}"
     return f"{where} of {len(totals)} seen, median ${format_dollars(round(median(totals)))}"

@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
@@ -13,6 +14,7 @@ from buy_assist.forms import ItemForm
 from buy_assist.links import LinkError, first_url
 from buy_assist.models import Edition, ItemFields, User, url_domain
 from buy_assist.parser import draft_from_link
+from buy_assist.watch import fetch_listings
 from buy_assist.web.pages import (
     ExistingItem,
     Me,
@@ -161,6 +163,7 @@ def create_item(
     item = store.create_item(fields)
     if services.sold_prices.covers(fields):
         background.add_task(record_sales_quietly, store, services.sold_prices, item)
+    background.add_task(fetch_listings, store, services.listing_sources, item, datetime.now(UTC))
     return RedirectResponse(f"/items/{item.id}", status_code=303)
 
 

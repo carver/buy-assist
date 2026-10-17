@@ -4,7 +4,7 @@ from datetime import date
 
 from buy_assist.claude import ParseError
 from buy_assist.links import LinkError, LinkFacts
-from buy_assist.models import Condition, Edition, ItemFields, Marketplace, Sale
+from buy_assist.models import Condition, Edition, ItemFields, Listing, Marketplace, Sale
 from buy_assist.paste import PastedSale
 from buy_assist.sold import SoldPriceError
 from buy_assist.usps import Origin, ShippingEstimate
@@ -168,3 +168,28 @@ class FixedQuoter:
 
     def quote(self, item: ItemFields, origin: Origin) -> ShippingEstimate | None:
         return ShippingEstimate(low_cents=900, typical_cents=1000, high_cents=1600)
+
+
+class FakeListingSource:
+    marketplace = Marketplace.BGG
+    label = "BoardGameGeek"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def covers(self, item: ItemFields) -> bool:
+        return item.reference_url == BGG_URL
+
+    def listings_for(self, item: ItemFields) -> list[Listing]:
+        self.calls += 1
+        return [
+            Listing(
+                marketplace=Marketplace.BGG,
+                external_id="1",
+                title="EXIT calendar listing",
+                url="https://boardgamegeek.com/market/product/1",
+                price_cents=4000,
+                is_new=True,
+                condition="New",
+            )
+        ]
