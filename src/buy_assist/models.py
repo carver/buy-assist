@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from urllib.parse import urlsplit
 
 _ZIP = re.compile(r"\d{5}")
 _UPC = re.compile(r"\d{8,14}")
@@ -15,6 +16,12 @@ def is_zip(text: str) -> bool:
 
 def is_upc(text: str) -> bool:
     return bool(_UPC.fullmatch(text))
+
+
+def url_domain(url: str) -> str | None:
+    """The host a link points at, without a leading "www.", or None if it has no host."""
+    host = urlsplit(url).hostname
+    return host.removeprefix("www.") if host else None
 
 
 def optional_text(value: object) -> str | None:
@@ -47,6 +54,7 @@ class ItemFields:
     epid: str | None = None
     model_number: str | None = None
     reference_url: str | None = None
+    image_url: str | None = None
     variant: str | None = None
     zip: str | None = None
     target_price_cents: int | None = None

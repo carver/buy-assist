@@ -2,13 +2,14 @@
 across the web server's worker threads."""
 
 import sqlite3
+from collections import Counter
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 
-from buy_assist.models import Condition, Item, ItemFields, User
+from buy_assist.models import Condition, Item, ItemFields, User, url_domain
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -102,6 +103,15 @@ class Store:
             ids = conn.execute(f"SELECT id FROM items WHERE {status} ORDER BY id").fetchall()
             return [_read_item(conn, row["id"]) for row in ids]
 
+    def reference_domain_counts(self) -> dict[str, int]:
+        """How many items, open or closed, link to each reference domain."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT reference_url FROM items WHERE reference_url IS NOT NULL"
+            ).fetchall()
+        domains = (url_domain(row["reference_url"]) for row in rows)
+        return dict(Counter(d for d in domains if d))
+
     def home_zip(self) -> str | None:
         with self._connect() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'home_zip'").fetchone()
@@ -123,6 +133,7 @@ _ITEM_COLUMN_NAMES = (
     "epid",
     "model_number",
     "reference_url",
+    "image_url",
     "variant",
     "zip",
     "target_price_cents",

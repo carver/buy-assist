@@ -26,6 +26,7 @@ def exit_calendar(watcher_ids: frozenset[int]) -> ItemFields:
         zip="94110",
         target_price_cents=3500,
         notes="Unopened only",
+        image_url="https://cf.geekdo-images.com/pic6632318.jpg",
         watcher_ids=watcher_ids,
     )
 
@@ -91,6 +92,7 @@ optional_text = st.none() | st.text(min_size=1, max_size=40)
         epid=optional_text,
         model_number=optional_text,
         reference_url=optional_text,
+        image_url=optional_text,
         variant=optional_text,
         zip=optional_text,
         target_price_cents=st.none() | st.integers(min_value=0, max_value=10**9),
@@ -112,3 +114,14 @@ def test_changing_missing_item_raises_not_found(tmp_path: Path) -> None:
         store.update_item(999, ItemFields(name="Ghost"))
     with pytest.raises(ItemNotFoundError):
         store.close_item(999)
+
+
+def test_reference_domains_count_open_and_closed_items(tmp_path: Path) -> None:
+    store = Store.open(tmp_path / "buy.db")
+    store.create_item(ItemFields(name="Calendar", reference_url=BGG_URL))
+    other_game = "https://www.boardgamegeek.com/boardgame/13/catan"
+    store.close_item(store.create_item(ItemFields(name="Catan", reference_url=other_game)).id)
+    store.create_item(ItemFields(name="Pan", reference_url="https://example.com/pan"))
+    store.create_item(ItemFields(name="Cardigan"))
+
+    assert store.reference_domain_counts() == {"boardgamegeek.com": 2, "example.com": 1}
