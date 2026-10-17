@@ -90,7 +90,7 @@ Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `
 
 ## Development
 
-`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff, pyright and the tests.
+`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff. Pyright and the tests are too slow for that hook, so they live in `scripts/agent-pre-commit`. To have agents' commits run it, link it in with `ln -s ../../scripts/agent-pre-commit .git/hooks/agent-pre-commit` and run `agent-commit-gate --install .`. Run it by hand before your own commits.
 
 ## Build order
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Slow checks for agent commits; agent-commit-gate runs this from the pre-commit hook.
+uv run pyright && uv run pytest -q
