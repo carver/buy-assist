@@ -1,13 +1,10 @@
+# Ruff comes from its own pre-commit repo, not the project's .venv, so the hook also works
+# on the host, which shares this checkout (and its sandbox-built .venv) with the sandbox.
+# Keep rev in step with ruff in uv.lock.
 repos:
-  - repo: local
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
     hooks:
       - id: ruff-format
-        name: ruff format
-        entry: uv run ruff format
-        language: system
-        types: [python]
       - id: ruff-check
-        name: ruff check
-        entry: uv run ruff check --fix
-        language: system
-        types: [python]
+        args: [--fix]
