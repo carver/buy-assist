@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-buy-assist = "buy_assist:main"
+buy-assist = "buy_assist.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

@@ -2,18 +2,16 @@ from typing import Any
 
 import pytest
 
-from buy_assist.models import Condition, ItemDraft
+from buy_assist.models import Condition, ItemFields
 from buy_assist.parser import ClaudeItemParser, ParseError
+from tests.fixtures import BGG_URL, EXIT_NAME
 
-BGG_URL = (
-    "https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol"
-)
 REQUEST = f"EXIT advent calendar golden book, new, under $35 {BGG_URL}"
 
 
 def answer(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "name": "EXIT: The Game Advent Calendar: The Hunt for the Golden Book",
+        "name": EXIT_NAME,
         "condition": "new",
         "upc": None,
         "epid": None,
@@ -33,8 +31,8 @@ def parser_answering(reply: dict[str, Any]) -> ClaudeItemParser:
 def test_parses_claude_answer_into_draft() -> None:
     draft = parser_answering(answer()).parse(REQUEST)
 
-    assert draft == ItemDraft(
-        name="EXIT: The Game Advent Calendar: The Hunt for the Golden Book",
+    assert draft == ItemFields(
+        name=EXIT_NAME,
         condition=Condition.NEW,
         reference_url=BGG_URL,
         target_price_cents=3500,

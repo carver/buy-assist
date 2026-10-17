@@ -1,46 +1,37 @@
-"""Turn a free-text item request into an ItemDraft by asking Claude through `claude-json`.
+"""Turn a free-text item request into draft ItemFields by asking Claude through `claude-json`.
 
 The request text is untrusted, and the schema only constrains the answer's shape, so every
-field is checked here before it reaches the draft.
+field is checked here before it reaches the draft. A person reviews the draft before saving.
 """
 
 import json
 import math
-import re
 import subprocess
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from buy_assist.models import Condition, ItemDraft
+from buy_assist.models import Condition, ItemFields, is_upc, optional_text
 
 type Runner = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 _NULLABLE_STRING = {"type": ["string", "null"]}
 
+_ANSWER_PROPERTIES: dict[str, Any] = {
+    "name": {"type": "string"},
+    "condition": {"type": "string", "enum": [c.value for c in Condition]},
+    "upc": _NULLABLE_STRING,
+    "epid": _NULLABLE_STRING,
+    "model_number": _NULLABLE_STRING,
+    "reference_url": _NULLABLE_STRING,
+    "variant": _NULLABLE_STRING,
+    "target_price_dollars": {"type": ["number", "null"]},
+    "notes": {"type": "string"},
+}
+
 SCHEMA: dict[str, Any] = {
     "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "condition": {"type": "string", "enum": [c.value for c in Condition]},
-        "upc": _NULLABLE_STRING,
-        "epid": _NULLABLE_STRING,
-        "model_number": _NULLABLE_STRING,
-        "reference_url": _NULLABLE_STRING,
-        "variant": _NULLABLE_STRING,
-        "target_price_dollars": {"type": ["number", "null"]},
-        "notes": {"type": "string"},
-    },
-    "required": [
-        "name",
-        "condition",
-        "upc",
-        "epid",
-        "model_number",
-        "reference_url",
-        "variant",
-        "target_price_dollars",
-        "notes",
-    ],
+    "properties": _ANSWER_PROPERTIES,
+    "required": list(_ANSWER_PROPERTIES),
     "additionalProperties": False,
 }
 
@@ -58,7 +49,6 @@ identifiers.
 - target_price_dollars: the most they want to pay, if given.
 - notes: any other wishes from the note, briefly; empty string if none."""
 
-_UPC = re.compile(r"\d{8,14}")
 _CLAUDE_TIMEOUT_SECONDS = 120
 
 
@@ -67,7 +57,7 @@ class ParseError(Exception):
 
 
 class ItemParser(Protocol):
-    def parse(self, text: str) -> ItemDraft: ...
+    def parse(self, text: str) -> ItemFields: ...
 
 
 def run_claude_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
@@ -105,31 +95,25 @@ class ClaudeItemParser:
     def __init__(self, run: Runner = run_claude_json) -> None:
         self._run = run
 
-    def parse(self, text: str) -> ItemDraft:
+    def parse(self, text: str) -> ItemFields:
         answer = self._run(f"<request>\n{text}\n</request>", SCHEMA)
         name = answer.get("name")
         notes = answer.get("notes", "")
         if not isinstance(name, str) or not isinstance(notes, str):
             raise ParseError("Claude's answer is missing a name or notes")
-        reference_url = _optional_string(answer.get("reference_url"))
-        upc = _optional_string(answer.get("upc"))
-        return ItemDraft(
+        reference_url = optional_text(answer.get("reference_url"))
+        upc = optional_text(answer.get("upc"))
+        return ItemFields(
             name=name.strip(),
             condition=_condition(answer.get("condition")),
-            upc=upc if upc and _UPC.fullmatch(upc) else None,
-            epid=_optional_string(answer.get("epid")),
-            model_number=_optional_string(answer.get("model_number")),
+            upc=upc if upc and is_upc(upc) else None,
+            epid=optional_text(answer.get("epid")),
+            model_number=optional_text(answer.get("model_number")),
             reference_url=reference_url if reference_url and reference_url in text else None,
-            variant=_optional_string(answer.get("variant")),
+            variant=optional_text(answer.get("variant")),
             target_price_cents=_cents(answer.get("target_price_dollars")),
             notes=notes.strip(),
         )
-
-
-def _optional_string(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    return value.strip() or None
 
 
 def _condition(value: object) -> Condition:

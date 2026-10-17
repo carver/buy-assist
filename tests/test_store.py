@@ -8,6 +8,7 @@ from hypothesis import strategies as st
 
 from buy_assist.models import Condition, ItemFields
 from buy_assist.store import ItemNotFoundError, Store
+from tests.fixtures import BGG_URL, EXIT_NAME
 
 
 def test_new_store_has_household_users(tmp_path: Path) -> None:
@@ -17,10 +18,10 @@ def test_new_store_has_household_users(tmp_path: Path) -> None:
 
 def exit_calendar(watcher_ids: frozenset[int]) -> ItemFields:
     return ItemFields(
-        name="EXIT: The Game Advent Calendar: The Hunt for the Golden Book",
+        name=EXIT_NAME,
         condition=Condition.NEW,
         model_number="681951",
-        reference_url="https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol",
+        reference_url=BGG_URL,
         variant="English edition",
         zip="94110",
         target_price_cents=3500,

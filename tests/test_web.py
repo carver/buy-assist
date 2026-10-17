@@ -4,15 +4,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from buy_assist.models import Condition, ItemDraft, ItemFields
+from buy_assist.models import Condition, ItemFields
 from buy_assist.parser import ParseError
 from buy_assist.store import Store
 from buy_assist.web import create_app
-
-BGG_URL = (
-    "https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol"
-)
-EXIT_NAME = "EXIT: The Game Advent Calendar: The Hunt for the Golden Book"
+from tests.fixtures import BGG_URL, EXIT_NAME
 
 
 class FakeParser:
@@ -20,11 +16,11 @@ class FakeParser:
         self.requests: list[str] = []
         self.fail = False
 
-    def parse(self, text: str) -> ItemDraft:
+    def parse(self, text: str) -> ItemFields:
         self.requests.append(text)
         if self.fail:
             raise ParseError("claude-json exited 1")
-        return ItemDraft(
+        return ItemFields(
             name=EXIT_NAME,
             condition=Condition.NEW,
             reference_url=BGG_URL,

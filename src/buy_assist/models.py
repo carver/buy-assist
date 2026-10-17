@@ -1,8 +1,27 @@
 """Domain types shared by the store, the parser and the web app."""
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+
+_ZIP = re.compile(r"\d{5}")
+_UPC = re.compile(r"\d{8,14}")
+
+
+def is_zip(text: str) -> bool:
+    return bool(_ZIP.fullmatch(text))
+
+
+def is_upc(text: str) -> bool:
+    return bool(_UPC.fullmatch(text))
+
+
+def optional_text(value: object) -> str | None:
+    """Stripped text, or None for blanks and anything that isn't a string."""
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
 
 
 class Condition(StrEnum):
@@ -33,21 +52,6 @@ class ItemFields:
     target_price_cents: int | None = None
     notes: str = ""
     watcher_ids: frozenset[int] = field(default_factory=frozenset[int])
-
-
-@dataclass(frozen=True)
-class ItemDraft:
-    """What Claude read out of a free-text request. A person reviews it before saving."""
-
-    name: str
-    condition: Condition = Condition.ANY
-    upc: str | None = None
-    epid: str | None = None
-    model_number: str | None = None
-    reference_url: str | None = None
-    variant: str | None = None
-    target_price_cents: int | None = None
-    notes: str = ""
 
 
 @dataclass(frozen=True)

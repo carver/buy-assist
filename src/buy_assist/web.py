@@ -1,6 +1,7 @@
 """The household web app: pick who you are, add items, view and edit them."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 
@@ -9,8 +10,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from buy_assist.forms import ItemForm, format_dollars, is_zip
-from buy_assist.models import Condition, Item, User
+from buy_assist.forms import ZIP_ERROR, ItemForm, format_dollars
+from buy_assist.models import Condition, Item, User, is_zip
 from buy_assist.parser import ItemParser, ParseError
 from buy_assist.store import Store
 
@@ -84,8 +85,8 @@ SubmittedForm = Annotated[ItemForm, Depends(_submitted_item_form)]
 
 
 def _ids(values: Sequence[object]) -> frozenset[int]:
-    """Parse submitted ids. Anything that isn't a number becomes -1, which no user has."""
-    return frozenset(int(v) if isinstance(v, str) and v.isdecimal() else -1 for v in values)
+    """Parse submitted ids, dropping anything that isn't a number."""
+    return frozenset(int(v) for v in values if isinstance(v, str) and v.isdecimal())
 
 
 def _page(
@@ -105,7 +106,7 @@ def _item_form_page(
     me: User,
     form: ItemForm,
     *,
-    action: str,
+    item_id: int | None,
     errors: list[str] | None = None,
     message: str | None = None,
 ) -> HTMLResponse:
@@ -115,7 +116,7 @@ def _item_form_page(
         me,
         status_code=422 if errors else 200,
         form=form,
-        action=action,
+        item_id=item_id,
         errors=errors or [],
         message=message,
         home_zip=_store(request).home_zip(),
@@ -125,10 +126,9 @@ def _item_form_page(
 def _save(
     request: Request, store: Store, me: User, form: ItemForm, item_id: int | None
 ) -> Response:
-    action = "/items" if item_id is None else f"/items/{item_id}"
     result = form.validate({u.id for u in store.users()})
     if isinstance(result, list):
-        return _item_form_page(request, me, form, action=action, errors=result)
+        return _item_form_page(request, me, form, item_id=item_id, errors=result)
     item = store.create_item(result) if item_id is None else store.update_item(item_id, result)
     return RedirectResponse(f"/items/{item.id}", status_code=303)
 
@@ -169,9 +169,9 @@ def draft_item(
     except ParseError:
         form = ItemForm(notes=text, watcher_ids=frozenset({me.id}))
         message = "Claude couldn't read that, so fill it in by hand."
-        return _item_form_page(request, me, form, action="/items", message=message)
-    form = ItemForm.from_draft(draft, watcher_id=me.id)
-    return _item_form_page(request, me, form, action="/items")
+        return _item_form_page(request, me, form, item_id=None, message=message)
+    form = ItemForm.from_fields(replace(draft, watcher_ids=frozenset({me.id})))
+    return _item_form_page(request, me, form, item_id=None)
 
 
 @router.post("/items")
@@ -186,7 +186,7 @@ def show_item(request: Request, store: StoreDep, me: Me, item: ExistingItem) -> 
 
 @router.get("/items/{item_id}/edit")
 def edit_item(request: Request, me: Me, item: ExistingItem) -> HTMLResponse:
-    return _item_form_page(request, me, ItemForm.from_item(item), action=f"/items/{item.id}")
+    return _item_form_page(request, me, ItemForm.from_fields(item.fields), item_id=item.id)
 
 
 @router.post("/items/{item_id}")
@@ -212,7 +212,7 @@ def save_settings(
     request: Request, store: StoreDep, me: Me, home_zip: Annotated[str, Form()]
 ) -> Response:
     if not is_zip(home_zip.strip()):
-        errors = ["ZIP must be 5 digits."]
+        errors = [ZIP_ERROR]
         return _page(
             request, "settings.html", me, status_code=422, home_zip=home_zip, errors=errors
         )
