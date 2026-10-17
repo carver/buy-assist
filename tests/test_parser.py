@@ -40,6 +40,13 @@ def test_parses_claude_answer_into_draft() -> None:
     )
 
 
+def test_search_words_come_from_claude() -> None:
+    draft = parser_answering(answer(search_query=" EXIT advent calendar golden book ")).parse(
+        REQUEST
+    )
+    assert draft.search_query == "EXIT advent calendar golden book"
+
+
 def test_request_text_reaches_claude() -> None:
     prompts: list[str] = []
 
@@ -233,6 +240,8 @@ def test_live_claude_parses_bgg_request() -> None:
     assert draft.reference_url == BGG_URL
     assert draft.condition is Condition.NEW
     assert draft.target_price_cents == 3500
+    assert draft.search_query is not None
+    assert "golden book" in draft.search_query.lower()
 
 
 def test_upc_inside_a_longer_number_is_not_found() -> None:

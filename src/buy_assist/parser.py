@@ -8,15 +8,12 @@ the draft before saving.
 import json
 import math
 import re
-import subprocess
-from collections.abc import Callable
 from dataclasses import asdict, replace
 from typing import Any, Protocol
 
+from buy_assist.claude import ParseError, Runner, claude_json
 from buy_assist.links import Edition, LinkFacts, first_url
 from buy_assist.models import Condition, ItemFields, is_upc, optional_text
-
-type Runner = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 _NULLABLE_STRING = {"type": ["string", "null"]}
 
@@ -27,6 +24,7 @@ _ANSWER_PROPERTIES: dict[str, Any] = {
     "epid": _NULLABLE_STRING,
     "model_number": _NULLABLE_STRING,
     "variant": _NULLABLE_STRING,
+    "search_query": {"type": "string"},
     "edition": _NULLABLE_STRING,
     "target_price_dollars": {"type": ["number", "null"]},
     "notes": {"type": "string"},
@@ -42,16 +40,12 @@ guess identifiers.
 - condition: "new" or "used" if the note asks for one, otherwise "any".
 - upc, epid, model_number: only when written in the note or the link.
 - variant: size, color or edition, if given.
+- search_query: 3 to 6 words a shopper would type into eBay to find this exact product: \
+brand, product line and the distinctive part of the name, no punctuation.
 - edition: when the link lists editions, the one the note asks for (by language, \
 publisher or year). If several fit, pick the newest. Null if the note doesn't say.
 - target_price_dollars: the most they want to pay, if given.
 - notes: any other wishes from the note, briefly; empty string if none."""
-
-_CLAUDE_TIMEOUT_SECONDS = 120
-
-
-class ParseError(Exception):
-    """Claude couldn't turn the request into a draft."""
 
 
 class ItemParser(Protocol):
@@ -70,39 +64,9 @@ def answer_schema(editions: tuple[Edition, ...]) -> dict[str, Any]:
     }
 
 
-def run_claude_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
-    try:
-        result = subprocess.run(
-            [
-                "claude-json",
-                "--schema",
-                json.dumps(schema),
-                "--system-prompt",
-                _SYSTEM_PROMPT,
-                "--timeout",
-                str(_CLAUDE_TIMEOUT_SECONDS),
-            ],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=_CLAUDE_TIMEOUT_SECONDS + 10,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as e:
-        raise ParseError(f"claude-json did not run: {type(e).__name__}") from e
-    if result.returncode != 0:
-        raise ParseError(f"claude-json exited {result.returncode}: {result.stderr.strip()[:200]}")
-    try:
-        answer = json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        raise ParseError("claude-json printed invalid JSON") from e
-    if not isinstance(answer, dict):
-        raise ParseError("claude-json answer is not an object")
-    return answer  # pyright: ignore[reportUnknownVariableType]
-
-
 class ClaudeItemParser:
-    def __init__(self, run: Runner = run_claude_json) -> None:
+    def __init__(self, run: Runner | None = None) -> None:
+        run = run or claude_json(_SYSTEM_PROMPT)
         self._run = run
 
     def parse(self, text: str, link: LinkFacts | None = None) -> ItemFields:
@@ -121,6 +85,7 @@ class ClaudeItemParser:
             epid=_stated(answer.get("epid"), sources),
             model_number=_stated(answer.get("model_number"), sources),
             variant=optional_text(answer.get("variant")),
+            search_query=optional_text(answer.get("search_query")),
             target_price_cents=_cents(answer.get("target_price_dollars")),
             notes=notes.strip(),
         )
