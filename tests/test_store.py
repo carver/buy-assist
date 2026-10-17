@@ -216,3 +216,11 @@ def test_pasted_sale_with_respaced_title_is_the_same_sale(tmp_path: Path) -> Non
     item = store.create_item(ItemFields(name="Calendar"))
     store.add_sales(item.id, [ebay_sale(date(2025, 1, 2), 30, "EXIT  Advent calendar ")])
     assert store.add_sales(item.id, [ebay_sale(date(2025, 1, 2), 30, "exit advent Calendar")]) == 0
+
+
+def test_item_box_round_trips(tmp_path: Path) -> None:
+    store = Store.open(tmp_path / "buy.db")
+    fields = ItemFields(
+        name="Calendar", weight_oz=30, length_in=17.76, width_in=12.91, depth_in=2.1
+    )
+    assert store.create_item(fields).fields == fields

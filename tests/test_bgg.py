@@ -93,3 +93,19 @@ def test_live_bgg_sales_for_fixture_game() -> None:
     sales = BggApi(httpx2.Client(timeout=20)).sales("343322")
     assert len(sales) >= 5
     assert all(s.price_cents > 0 for s in sales)
+
+
+def test_editions_carry_box_size_and_weight_when_bgg_has_them() -> None:
+    editions = {e.name: e for e in api().editions("343322")}
+
+    dutch = editions["Dutch edition (2025)"]
+    assert (dutch.length_in, dutch.width_in, dutch.depth_in) == (17.7559, 12.9134, 2.12598)
+    assert dutch.weight_lb == 1.87393
+    assert editions["French edition"].length_in is None
+
+
+def test_edition_without_weight_borrows_it_from_an_edition_with_the_same_box() -> None:
+    editions = {e.name: e for e in api().editions("343322")}
+
+    assert editions["English edition"].weight_lb == 1.87393
+    assert editions["French edition"].weight_lb is None

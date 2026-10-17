@@ -194,6 +194,10 @@ _ITEM_COLUMN_NAMES = (
     "search_query",
     "variant",
     "zip",
+    "weight_oz",
+    "length_in",
+    "width_in",
+    "depth_in",
     "target_price_cents",
     "notes",
 )

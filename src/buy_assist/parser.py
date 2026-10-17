@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from buy_assist.claude import ParseError, Runner, claude_json
 from buy_assist.links import LinkFacts, first_url
-from buy_assist.models import Condition, Edition, ItemFields, is_upc, optional_text
+from buy_assist.models import Condition, Edition, ItemFields, is_upc, is_zip, optional_text
 
 _NULLABLE_STRING = {"type": ["string", "null"]}
 
@@ -24,6 +24,7 @@ _ANSWER_PROPERTIES: dict[str, Any] = {
     "epid": _NULLABLE_STRING,
     "model_number": _NULLABLE_STRING,
     "variant": _NULLABLE_STRING,
+    "zip": _NULLABLE_STRING,
     "search_query": {"type": "string"},
     "edition": _NULLABLE_STRING,
     "target_price_dollars": {"type": ["number", "null"]},
@@ -40,6 +41,7 @@ guess identifiers.
 - condition: "new" or "used" if the note asks for one, otherwise "any".
 - upc, epid, model_number: only when written in the note or the link.
 - variant: size, color or edition, if given.
+- zip: a 5-digit ZIP code the note says to ship to; null if it doesn't say.
 - search_query: 3 to 6 words a shopper would type into eBay to find this exact product: \
 brand, product line and the distinctive part of the name, no punctuation.
 - edition: when the link lists editions, the one the note asks for (by language, \
@@ -85,6 +87,9 @@ class ClaudeItemParser:
             epid=_stated(answer.get("epid"), sources),
             model_number=_stated(answer.get("model_number"), sources),
             variant=optional_text(answer.get("variant")),
+            zip=zip_code
+            if (zip_code := _stated(answer.get("zip"), [text])) and is_zip(zip_code)
+            else None,
             search_query=optional_text(answer.get("search_query")),
             target_price_cents=_cents(answer.get("target_price_dollars")),
             notes=notes.strip(),
@@ -112,7 +117,19 @@ def _with_link(
         reference_url=first_url(text),
         image_url=link.image_url,
         variant=edition.name if edition else draft.variant,
+        **(_edition_box(edition) if edition else {}),
     )
+
+
+def _edition_box(edition: Edition) -> dict[str, Any]:
+    """The edition's weight and size as item fields, leaving out what BGG doesn't know."""
+    box = {
+        "weight_oz": round(edition.weight_lb * 16) if edition.weight_lb else None,
+        "length_in": edition.length_in,
+        "width_in": edition.width_in,
+        "depth_in": edition.depth_in,
+    }
+    return {field: value for field, value in box.items() if value is not None}
 
 
 def _link_texts(link: LinkFacts) -> list[str]:

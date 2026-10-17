@@ -1,12 +1,14 @@
 """The item form: its string values for display, and validation into ItemFields."""
 
+import math
 import re
 from dataclasses import dataclass, field, fields
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from buy_assist.models import Condition, ItemFields, is_upc, is_zip, optional_text
 
 ZIP_ERROR = "ZIP must be 5 digits."
+_BOX_SEPARATOR = re.compile(r"[\sx\u00d7,*]+", re.IGNORECASE)
 _DOLLARS = re.compile(r"\$?\s*(\d+(?:\.\d{1,2})?)")
 
 
@@ -24,6 +26,8 @@ class ItemForm:
     search_query: str = ""
     variant: str = ""
     zip: str = ""
+    weight_lb: str = ""
+    box_in: str = ""
     target_price: str = ""
     notes: str = ""
     watcher_ids: frozenset[int] = field(default_factory=frozenset[int])
@@ -45,6 +49,8 @@ class ItemForm:
             search_query=item_fields.search_query or "",
             variant=item_fields.variant or "",
             zip=item_fields.zip or "",
+            weight_lb=format_pounds(item_fields.weight_oz),
+            box_in=format_box(item_fields, " x "),
             target_price=format_dollars(item_fields.target_price_cents),
             notes=item_fields.notes,
             watcher_ids=item_fields.watcher_ids,
@@ -70,6 +76,12 @@ class ItemForm:
         target_price_cents = parse_dollars(self.target_price)
         if self.target_price.strip() and target_price_cents is None:
             errors.append("Target price must be a dollar amount, like 35 or 35.50.")
+        weight_oz = parse_pounds(self.weight_lb)
+        if self.weight_lb.strip() and weight_oz is None:
+            errors.append("Weight must be a number of pounds, like 1.9.")
+        box = parse_box(self.box_in)
+        if self.box_in.strip() and box is None:
+            errors.append("Box size must be three numbers of inches, like 17.8 x 12.9 x 2.1.")
         if not self.watcher_ids:
             errors.append("Pick at least one person to alert.")
         elif not self.watcher_ids <= known_user_ids:
@@ -87,6 +99,10 @@ class ItemForm:
             search_query=optional_text(self.search_query),
             variant=optional_text(self.variant),
             zip=optional_text(self.zip),
+            weight_oz=weight_oz,
+            length_in=box[0] if box else None,
+            width_in=box[1] if box else None,
+            depth_in=box[2] if box else None,
             target_price_cents=target_price_cents,
             notes=self.notes.strip(),
             watcher_ids=self.watcher_ids,
@@ -102,6 +118,38 @@ def parse_dollars(text: str) -> int | None:
     if not match:
         return None
     return int(Decimal(match.group(1)) * 100)
+
+
+def parse_pounds(text: str) -> int | None:
+    """Pounds as typed, in whole ounces, or None if it isn't a positive weight."""
+    try:
+        pounds = Decimal(text.strip())
+    except InvalidOperation:
+        return None
+    ounces = round(pounds * 16) if pounds.is_finite() else 0
+    return ounces if ounces > 0 else None
+
+
+def format_pounds(ounces: int | None) -> str:
+    return "" if ounces is None else f"{ounces / 16:.2f}"
+
+
+def parse_box(text: str) -> tuple[float, float, float] | None:
+    """Three positive sizes in inches, like '17.8 x 12.9 x 2.1'. Between them can go x, a
+    multiplication sign, commas or spaces."""
+    parts = [p for p in _BOX_SEPARATOR.split(text.strip()) if p]
+    try:
+        sizes = [float(p) for p in parts]
+    except ValueError:
+        return None
+    if len(sizes) != 3 or not all(math.isfinite(s) and s > 0 for s in sizes):
+        return None
+    return (sizes[0], sizes[1], sizes[2])
+
+
+def format_box(fields: ItemFields, separator: str = " \u00d7 ") -> str:
+    sizes = (fields.length_in, fields.width_in, fields.depth_in)
+    return separator.join(f"{s:g}" for s in sizes if s) if all(sizes) else ""
 
 
 def _is_web_url(url: str) -> bool:

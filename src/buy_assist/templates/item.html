@@ -15,6 +15,8 @@
   {% if f.upc %}<dt>UPC</dt><dd>{{ f.upc }}</dd>{% endif %}
   {% if f.epid %}<dt>eBay product ID</dt><dd>{{ f.epid }}</dd>{% endif %}
   {% if f.model_number %}<dt>Model number</dt><dd>{{ f.model_number }}</dd>{% endif %}
+  {% set size = f | box %}
+  {% if f.weight_oz or size %}<dt>Package</dt><dd>{{ size }}{% if size %} in{% endif %}{% if size and f.weight_oz %}, {% endif %}{% if f.weight_oz %}{{ f.weight_oz | pounds }} lb{% endif %}</dd>{% endif %}
   <dt>Ship to</dt><dd>{% if f.zip %}{{ f.zip }}{% else %}home{% if home_zip %} ({{ home_zip }}){% endif %}{% endif %}</dd>
   <dt>Alerts</dt><dd>{% for user in users if user.id in f.watcher_ids %}{{ user.name }}{% if not loop.last %}, {% endif %}{% else %}nobody{% endfor %}</dd>
   {% if f.reference_url %}<dt>Reference</dt><dd><a href="{{ f.reference_url }}" rel="noreferrer" target="_blank">{{ f.reference_url }}</a></dd>{% endif %}

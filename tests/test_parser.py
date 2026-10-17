@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -19,6 +20,7 @@ def answer(**overrides: Any) -> dict[str, Any]:
         "epid": None,
         "model_number": None,
         "variant": None,
+        "zip": None,
         "edition": None,
         "target_price_dollars": 35,
         "notes": "",
@@ -268,3 +270,22 @@ def test_no_edition_and_no_english_edition_leaves_edition_unset() -> None:
     facts = LinkFacts(source="BoardGameGeek", name="Calendar", editions=(GERMAN,))
     draft = parser_answering(answer(edition=None)).parse(REQUEST, facts)
     assert draft.variant is None
+
+
+def test_chosen_edition_box_becomes_item_weight_and_size() -> None:
+    boxed = replace(ENGLISH, weight_lb=1.875, length_in=17.76, width_in=12.91, depth_in=2.13)
+    facts = replace(BGG_FACTS, editions=(GERMAN, boxed))
+
+    draft = parser_answering(answer(edition="English edition")).parse(REQUEST, facts)
+
+    assert draft.weight_oz == 30
+    assert (draft.length_in, draft.width_in, draft.depth_in) == (17.76, 12.91, 2.13)
+
+
+def test_ship_to_zip_written_in_request_is_drafted() -> None:
+    draft = parser_answering(answer(zip="10001")).parse(f"{REQUEST} ship to 10001")
+    assert draft.zip == "10001"
+
+
+def test_ship_to_zip_not_in_request_is_dropped() -> None:
+    assert parser_answering(answer(zip="10001")).parse(REQUEST).zip is None

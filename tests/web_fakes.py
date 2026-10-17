@@ -151,6 +151,8 @@ def item_form(**overrides: str | list[str]) -> dict[str, str | list[str]]:
         "model_number": "",
         "reference_url": BGG_URL,
         "search_query": "",
+        "weight_lb": "",
+        "box_in": "",
         "variant": "",
         "zip": "94110",
         "target_price": "35",

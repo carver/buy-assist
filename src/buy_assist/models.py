@@ -47,6 +47,10 @@ class Edition:
     year: str | None
     languages: tuple[str, ...]
     publishers: tuple[str, ...]
+    weight_lb: float | None = None
+    length_in: float | None = None
+    width_in: float | None = None
+    depth_in: float | None = None
 
 
 class SaleSource(StrEnum):
@@ -120,6 +124,10 @@ class ItemFields:
     search_query: str | None = None
     variant: str | None = None
     zip: str | None = None
+    weight_oz: int | None = None
+    length_in: float | None = None
+    width_in: float | None = None
+    depth_in: float | None = None
     target_price_cents: int | None = None
     notes: str = ""
     watcher_ids: frozenset[int] = field(default_factory=frozenset[int])

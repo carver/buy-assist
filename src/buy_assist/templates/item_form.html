@@ -63,6 +63,17 @@
     </div>
   </div>
 
+  <div class="row">
+    <div>
+      <label for="weight_lb">Weight (lb) <small>for shipping estimates</small></label>
+      <input id="weight_lb" name="weight_lb" inputmode="decimal" value="{{ form.weight_lb }}">
+    </div>
+    <div>
+      <label for="box_in">Box size (in)</label>
+      <input id="box_in" name="box_in" value="{{ form.box_in }}" placeholder="17.8 x 12.9 x 2.1">
+    </div>
+  </div>
+
   <label for="zip">Ship to ZIP <small>blank means home</small></label>
   <input id="zip" name="zip" inputmode="numeric" value="{{ form.zip }}"{% if home_zip %} placeholder="{{ home_zip }}"{% endif %}>
 

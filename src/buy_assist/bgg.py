@@ -5,6 +5,7 @@ sit behind a Cloudflare challenge. Every call goes through one throttle, at most
 request every 5 seconds, the gap BGG's API wiki gives as safe.
 """
 
+import math
 import re
 import threading
 import time
@@ -101,7 +102,7 @@ class BggApi:
             "subtype": "boardgameversion",
         }
         versions = self._get(_VersionsAnswer, "/geekitem/linkeditems", params).items
-        return _distinct_names([e for v in versions if (e := v.edition())])
+        return _with_shared_weights(_distinct_names([e for v in versions if (e := v.edition())]))
 
     def sales(self, game_id: str) -> list[Sale]:
         """GeekMarket sales in US dollars, newest first. GeekMarket records no shipping."""
@@ -150,6 +151,31 @@ def _distinct_names(editions: list[Edition]) -> tuple[Edition, ...]:
     return tuple(distinct)
 
 
+def _with_shared_weights(editions: tuple[Edition, ...]) -> tuple[Edition, ...]:
+    """Give editions with a box size but no weight the weight of an edition with the same box.
+    BGG contributors often fill in one edition's weight and only the sizes of the others."""
+    weights = {_box(e): e.weight_lb for e in editions if e.weight_lb and _box(e)}
+    return tuple(
+        replace(e, weight_lb=weights.get(_box(e))) if e.weight_lb is None and _box(e) else e
+        for e in editions
+    )
+
+
+def _box(edition: Edition) -> tuple[float, float, float] | None:
+    if edition.length_in and edition.width_in and edition.depth_in:
+        return (edition.length_in, edition.width_in, edition.depth_in)
+    return None
+
+
+def _measure(value: str | None) -> float | None:
+    """A BGG size in inches or weight in pounds. BGG stores unknown ones as 0."""
+    try:
+        number = float(value or "")
+    except ValueError:
+        return None
+    return number if number > 0 and math.isfinite(number) else None
+
+
 class _Link(BaseModel):
     name: str = ""
 
@@ -168,6 +194,10 @@ class _Version(BaseModel):
     linkedname: str | None = None
     productcode: str | None = None
     yearpublished: str | None = None
+    length: str | None = None
+    width: str | None = None
+    depth: str | None = None
+    weight: str | None = None
     links: dict[str, list[_Link]] = {}
 
     def edition(self) -> Edition | None:
@@ -182,6 +212,10 @@ class _Version(BaseModel):
             year=optional_text(self.yearpublished),
             languages=self._names("languages"),
             publishers=self._names("boardgamepublisher"),
+            weight_lb=_measure(self.weight),
+            length_in=_measure(self.length),
+            width_in=_measure(self.width),
+            depth_in=_measure(self.depth),
         )
 
     def _names(self, kind: str) -> tuple[str, ...]:

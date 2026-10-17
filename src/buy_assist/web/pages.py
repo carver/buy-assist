@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from buy_assist.ebay import sold_search_url
-from buy_assist.forms import format_dollars
+from buy_assist.forms import format_box, format_dollars, format_pounds
 from buy_assist.links import LinkReader
 from buy_assist.models import Condition, Item, User
 from buy_assist.parser import ItemParser
@@ -22,6 +22,8 @@ PACKAGE_DIR = Path(__file__).parent.parent
 
 _templates = Jinja2Templates(directory=PACKAGE_DIR / "templates")
 _templates.env.filters["dollars"] = format_dollars  # pyright: ignore[reportUnknownMemberType]
+_templates.env.filters["box"] = format_box  # pyright: ignore[reportUnknownMemberType]
+_templates.env.filters["pounds"] = format_pounds  # pyright: ignore[reportUnknownMemberType]
 
 
 @dataclass(frozen=True)

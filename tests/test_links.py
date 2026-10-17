@@ -68,6 +68,10 @@ def test_bgg_game_gives_name_image_and_editions() -> None:
             year="2022",
             languages=("English",),
             publishers=("KOSMOS",),
+            weight_lb=1.87393,
+            length_in=17.7559,
+            width_in=12.9134,
+            depth_in=2.12598,
         )
         in facts.editions
     )

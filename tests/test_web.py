@@ -104,6 +104,9 @@ def test_saved_item_has_form_values(shira: TestClient, store: Store) -> None:
         ("reference_url", "javascript:alert(1)", "Reference link must start with http"),
         ("watcher_ids", ["99"], "Unknown watcher"),
         ("watcher_ids", [], "Pick at least one person to alert"),
+        ("weight_lb", "heavy", "Weight must be a number of pounds"),
+        ("weight_lb", "0", "Weight must be a number of pounds"),
+        ("box_in", "17 x 12", "Box size must be three numbers"),
     ],
 )
 def test_invalid_form_is_shown_again_with_error(
@@ -276,3 +279,23 @@ def test_link_without_host_names_the_link_in_notice(
     links.error = "Only http and https links can be read."
     page = shira.post("/items/draft", data={"text": "see http://:80/x"}).text
     assert "Couldn&#39;t read http://:80/x" in page
+
+
+def test_weight_and_box_size_are_saved_and_shown(shira: TestClient, store: Store) -> None:
+    location = shira.post(
+        "/items",
+        data=item_form(weight_lb="1.875", box_in="17.76 x 12.91 \u00d7 2.13"),
+        follow_redirects=False,
+    ).headers["location"]
+
+    [item] = store.list_items(open_items=True)
+    assert item.fields.weight_oz == 30
+    assert (item.fields.length_in, item.fields.width_in, item.fields.depth_in) == (
+        17.76,
+        12.91,
+        2.13,
+    )
+    assert "17.76 \u00d7 12.91 \u00d7 2.13 in, 1.88 lb" in shira.get(location).text
+    edit_page = shira.get(f"{location}/edit").text
+    assert 'name="weight_lb" inputmode="decimal" value="1.88"' in edit_page
+    assert 'value="17.76 x 12.91 x 2.13"' in edit_page
