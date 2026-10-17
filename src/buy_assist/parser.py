@@ -10,7 +10,7 @@ import math
 import re
 import subprocess
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Protocol
 
 from buy_assist.links import Edition, LinkFacts, first_url
@@ -107,44 +107,46 @@ class ClaudeItemParser:
 
     def parse(self, text: str, link: LinkFacts | None = None) -> ItemFields:
         """Draft fields from the request. A link's own name and editions beat Claude's guesses."""
-        editions = link.editions if link else ()
-        answer = self._run(_prompt(text, link), answer_schema(editions))
+        answer = self._run(_prompt(text, link), answer_schema(link.editions if link else ()))
         name = answer.get("name")
         notes = answer.get("notes", "")
         if not isinstance(name, str) or not isinstance(notes, str):
             raise ParseError("Claude's answer is missing a name or notes")
-        edition = _pick_edition(editions, answer.get("edition"))
         sources = [text, *(_link_texts(link) if link else [])]
         upc = _stated(answer.get("upc"), sources)
-        if not (upc and is_upc(upc)):
-            upc = link.upc if link else None
-        model_number = _stated(answer.get("model_number"), sources)
-        return ItemFields(
-            name=(edition and edition.title) or (link and link.name) or name.strip(),
+        draft = ItemFields(
+            name=name.strip(),
             condition=_condition(answer.get("condition")),
-            upc=upc,
+            upc=upc if upc and is_upc(upc) else None,
             epid=_stated(answer.get("epid"), sources),
-            model_number=(edition.product_code if edition else model_number)
-            or (link and link.model_number),
-            reference_url=first_url(text),
-            image_url=link.image_url if link else None,
-            variant=edition.name if edition else optional_text(answer.get("variant")),
+            model_number=_stated(answer.get("model_number"), sources),
+            variant=optional_text(answer.get("variant")),
             target_price_cents=_cents(answer.get("target_price_dollars")),
             notes=notes.strip(),
         )
+        return _with_link(draft, text, link, answer.get("edition"))
 
 
 def draft_from_link(text: str, link: LinkFacts | None) -> ItemFields:
     """A draft from the link alone, for when Claude can't read the request."""
-    edition = _pick_edition(link.editions, None) if link else None
-    return ItemFields(
-        name=(edition and edition.title) or (link and link.name) or "",
-        upc=link.upc if link else None,
-        model_number=(edition and edition.product_code) or (link and link.model_number),
+    return _with_link(ItemFields(name="", notes=text), text, link, None)
+
+
+def _with_link(
+    draft: ItemFields, text: str, link: LinkFacts | None, chosen_edition: object
+) -> ItemFields:
+    """Lay the link over a draft: its name, edition and image win; its identifiers fill gaps."""
+    if link is None:
+        return replace(draft, reference_url=first_url(text))
+    edition = _pick_edition(link.editions, chosen_edition)
+    return replace(
+        draft,
+        name=(edition and edition.title) or link.name or draft.name,
+        upc=draft.upc or link.upc,
+        model_number=(edition.product_code if edition else draft.model_number) or link.model_number,
         reference_url=first_url(text),
-        image_url=link.image_url if link else None,
-        variant=edition.name if edition else None,
-        notes=text,
+        image_url=link.image_url,
+        variant=edition.name if edition else draft.variant,
     )
 
 

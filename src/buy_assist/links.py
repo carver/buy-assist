@@ -34,7 +34,7 @@ _PAGE_DEADLINE_SECONDS = 20.0
 _MAX_PAGE_TEXT = 6000
 _USER_AGENT = "buy-assist/0.1 (household shopping list)"
 
-DEDICATED_DOMAINS = {"boardgamegeek.com": "BoardGameGeek"}
+_BGG_LABEL = "BoardGameGeek"
 
 
 type Json = dict[str, Json] | list[Json] | str | int | float | bool | None
@@ -116,13 +116,10 @@ class HttpLinkReader:
         self._bgg_throttle = _Throttle(_BGG_MIN_INTERVAL_SECONDS, clock, sleep)
 
     def read(self, url: str) -> LinkFacts:
-        if urlsplit(url).scheme not in ("http", "https"):
-            raise LinkError("Only http and https links can be read.")
-        if url_domain(url) == "boardgamegeek.com":
-            return self._read_bgg(url)
-        return self._read_page(url)
+        dedicated = _DEDICATED_READERS.get(url_domain(url) or "")
+        return dedicated.read(self, url) if dedicated else self._read_page(url)
 
-    def _read_bgg(self, url: str) -> LinkFacts:
+    def read_bgg(self, url: str) -> LinkFacts:
         match = _BGG_GAME_PATH.search(urlsplit(url).path)
         if not match:
             raise LinkError("That BoardGameGeek link isn't a game page.")
@@ -148,7 +145,7 @@ class HttpLinkReader:
             },
         )
         return LinkFacts(
-            source=DEDICATED_DOMAINS["boardgamegeek.com"],
+            source=_BGG_LABEL,
             name=optional_text(game.name),
             image_url=_web_url(game.imageurl),
             editions=_distinct_names([e for v in versions.items if (e := v.edition())]),
@@ -229,6 +226,18 @@ class HttpLinkReader:
             if self._clock() > deadline:
                 raise LinkError("That page took too long to load.")
         return bytes(body)
+
+
+@dataclass(frozen=True)
+class _DedicatedReader:
+    label: str
+    read: Callable[[HttpLinkReader, str], LinkFacts]
+
+
+_DEDICATED_READERS = {"boardgamegeek.com": _DedicatedReader(_BGG_LABEL, HttpLinkReader.read_bgg)}
+
+DEDICATED_DOMAINS = {domain: reader.label for domain, reader in _DEDICATED_READERS.items()}
+"""Domains with their own reader, and the reader's name."""
 
 
 @dataclass(frozen=True)

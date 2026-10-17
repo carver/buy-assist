@@ -38,6 +38,10 @@ def create_app(db_path: Path, parser: ItemParser, links: LinkReader) -> FastAPI:
     return app
 
 
+READER_WORTHWHILE_ITEMS = 3
+"""Items linking to one domain before a dedicated reader for it is worth writing."""
+
+
 @dataclass(frozen=True)
 class ReferenceDomain:
     domain: str
@@ -47,7 +51,7 @@ class ReferenceDomain:
     @property
     def wants_reader(self) -> bool:
         """Enough items link here that a dedicated reader would pay off."""
-        return self.reader is None and self.item_count >= 3
+        return self.reader is None and self.item_count >= READER_WORTHWHILE_ITEMS
 
 
 class _NoIdentity(Exception):
