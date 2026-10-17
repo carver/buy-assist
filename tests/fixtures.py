@@ -21,6 +21,8 @@ def recorded_bgg_api(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(200, content=(DATA / "bgg_thing_343322.json").read_bytes())
     if request.url.path == "/api/geekitem/linkeditems":
         return httpx2.Response(200, content=(DATA / "bgg_versions_343322.json").read_bytes())
+    if request.url.path == "/api/market/products":
+        return httpx2.Response(200, content=(DATA / "bgg_market_343322.json").read_bytes())
     if request.url.path == "/api/market/products/pricehistory":
         return httpx2.Response(200, content=(DATA / "bgg_pricehistory_343322.json").read_bytes())
     return httpx2.Response(404)

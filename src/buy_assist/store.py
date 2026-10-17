@@ -13,7 +13,10 @@ from buy_assist.models import (
     Condition,
     Item,
     ItemFields,
+    Listing,
+    ListingChanges,
     Marketplace,
+    RecordedListing,
     RecordedSale,
     Sale,
     User,
@@ -160,6 +163,89 @@ class Store:
             )
             return cursor.rowcount > 0
 
+    def record_listings(
+        self, item_id: int, marketplace: Marketplace, listings: Iterable[Listing], now: datetime
+    ) -> ListingChanges:
+        """Record what a marketplace shows for an item now. Its listings missing from this look
+        have ended; a listing seen again after ending is active again but not new."""
+        seen_at = now.isoformat()
+        new: list[int] = []
+        repriced: list[int] = []
+        with self._connect() as conn:
+            known = {
+                row["external_id"]: row
+                for row in conn.execute(
+                    "SELECT id, external_id, price_cents, shipping_cents FROM listings"
+                    " WHERE item_id = ? AND marketplace = ?",
+                    (item_id, marketplace.value),
+                )
+            }
+            seen: set[str] = set()
+            for listing in listings:
+                seen.add(listing.external_id)
+                row = known.get(listing.external_id)
+                values = _listing_values(listing)
+                if row is None:
+                    cursor = conn.execute(
+                        f"INSERT INTO listings (item_id, {_LISTING_COLUMNS}, first_seen, last_seen)"
+                        f" VALUES (?, {', '.join('?' * len(values))}, ?, ?)",
+                        (item_id, *values, seen_at, seen_at),
+                    )
+                    listing_id = cursor.lastrowid
+                    assert listing_id is not None
+                    new.append(listing_id)
+                else:
+                    listing_id = row["id"]
+                    assignments = ", ".join(f"{c} = ?" for c in _LISTING_COLUMN_NAMES)
+                    conn.execute(
+                        f"UPDATE listings SET {assignments}, last_seen = ?, ended_at = NULL"
+                        " WHERE id = ?",
+                        (*values, seen_at, listing_id),
+                    )
+                    price = (row["price_cents"], row["shipping_cents"])
+                    if price == (listing.price_cents, listing.shipping_cents):
+                        continue
+                    repriced.append(listing_id)
+                conn.execute(
+                    "INSERT INTO listing_prices (listing_id, seen_at, price_cents, shipping_cents)"
+                    " VALUES (?, ?, ?, ?)",
+                    (listing_id, seen_at, listing.price_cents, listing.shipping_cents),
+                )
+            ended = [
+                row["id"]
+                for external_id, row in known.items()
+                if external_id not in seen
+                and conn.execute(
+                    "UPDATE listings SET ended_at = ? WHERE id = ? AND ended_at IS NULL",
+                    (seen_at, row["id"]),
+                ).rowcount
+            ]
+            return ListingChanges(
+                new=[_read_listing(conn, i) for i in new],
+                repriced=[_read_listing(conn, i) for i in repriced],
+                ended=[_read_listing(conn, i) for i in ended],
+            )
+
+    def listings(self, item_id: int, *, include_ended: bool = False) -> list[RecordedListing]:
+        """An item's listings, cheapest first."""
+        ended = "" if include_ended else " AND ended_at IS NULL"
+        with self._connect() as conn:
+            ids = conn.execute(
+                f"SELECT id FROM listings WHERE item_id = ?{ended} ORDER BY price_cents, id",
+                (item_id,),
+            ).fetchall()
+            return [_read_listing(conn, row["id"]) for row in ids]
+
+    def price_history(self, listing_id: int) -> list[tuple[datetime, int]]:
+        """When a listing's price was seen and what it was, each change once."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT seen_at, price_cents FROM listing_prices WHERE listing_id = ?"
+                " ORDER BY seen_at",
+                (listing_id,),
+            ).fetchall()
+        return [(datetime.fromisoformat(r["seen_at"]), r["price_cents"]) for r in rows]
+
     def reference_domain_counts(self) -> dict[str, int]:
         """How many items, open or closed, link to each reference domain."""
         with self._connect() as conn:
@@ -206,6 +292,54 @@ _ITEM_COLUMNS = ", ".join(_ITEM_COLUMN_NAMES)
 
 def _item_values(fields: ItemFields) -> tuple[object, ...]:
     return tuple(getattr(fields, name) for name in _ITEM_COLUMN_NAMES)
+
+
+_LISTING_COLUMN_NAMES = (
+    "marketplace",
+    "external_id",
+    "title",
+    "url",
+    "price_cents",
+    "shipping_cents",
+    "is_new",
+    "condition",
+    "edition",
+    "origin_state",
+    "origin_zip3",
+)
+_LISTING_COLUMNS = ", ".join(_LISTING_COLUMN_NAMES)
+
+
+def _listing_values(listing: Listing) -> tuple[object, ...]:
+    return tuple(
+        listing.marketplace.value if name == "marketplace" else getattr(listing, name)
+        for name in _LISTING_COLUMN_NAMES
+    )
+
+
+def _read_listing(conn: sqlite3.Connection, listing_id: int) -> RecordedListing:
+    row = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+    ended_at = row["ended_at"]
+    return RecordedListing(
+        id=row["id"],
+        item_id=row["item_id"],
+        listing=Listing(
+            marketplace=Marketplace(row["marketplace"]),
+            external_id=row["external_id"],
+            title=row["title"],
+            url=row["url"],
+            price_cents=row["price_cents"],
+            shipping_cents=row["shipping_cents"],
+            is_new=bool(row["is_new"]),
+            condition=row["condition"],
+            edition=row["edition"],
+            origin_state=row["origin_state"],
+            origin_zip3=row["origin_zip3"],
+        ),
+        first_seen=datetime.fromisoformat(row["first_seen"]),
+        last_seen=datetime.fromisoformat(row["last_seen"]),
+        ended_at=datetime.fromisoformat(ended_at) if ended_at else None,
+    )
 
 
 def _dedupe_key(sale: Sale) -> str:

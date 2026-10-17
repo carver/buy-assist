@@ -6,8 +6,10 @@ import httpx2
 import pytest
 
 from buy_assist.bgg import BggApi, BggError, game_id
-from buy_assist.models import Marketplace, Sale
+from buy_assist.models import Listing, Marketplace, Sale
 from tests.fixtures import BGG_URL, DATA, FakeClock, recorded_bgg_api
+
+EXIT_TITLE = "EXIT: The Game \u2013 Advent Calendar: The Hunt for the Golden Book"
 
 
 def api(
@@ -109,3 +111,23 @@ def test_edition_without_weight_borrows_it_from_an_edition_with_the_same_box() -
 
     assert editions["English edition"].weight_lb == 1.87393
     assert editions["French edition"].weight_lb is None
+
+
+def test_us_listings_are_active_usd_listings_located_in_the_us() -> None:
+    listings = api().us_listings("343322")
+
+    assert len(listings) == 4
+    assert [listing.price_cents for listing in listings] == [3500, 4000, 4000, 4000]
+    by_id = {listing.external_id: listing for listing in listings}
+    assert by_id["3851948"] == Listing(
+        marketplace=Marketplace.BGG,
+        external_id="3851948",
+        title=f"{EXIT_TITLE} (English edition)",
+        url="https://boardgamegeek.com/market/product/3851948",
+        price_cents=4000,
+        is_new=True,
+        condition="New",
+        edition="English edition",
+        origin_state="Louisiana",
+    )
+    assert {listing.condition for listing in listings} == {"New", "Very Good", "Like New"}

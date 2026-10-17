@@ -62,6 +62,48 @@ class Marketplace(StrEnum):
         """The source's name, as shown to people."""
         return {Marketplace.BGG: "BoardGameGeek", Marketplace.EBAY: "eBay"}[self]
 
+    @property
+    def collects_tax(self) -> bool:
+        """Whether buying here adds sales tax. eBay collects it as a marketplace facilitator;
+        GeekMarket buyers pay sellers directly, untaxed."""
+        return self is Marketplace.EBAY
+
+
+@dataclass(frozen=True)
+class Listing:
+    """Something for sale right now, as a marketplace shows it."""
+
+    marketplace: Marketplace
+    external_id: str
+    title: str
+    url: str
+    price_cents: int
+    is_new: bool
+    condition: str
+    shipping_cents: int | None = None
+    edition: str | None = None
+    origin_state: str | None = None
+    origin_zip3: str | None = None
+
+
+@dataclass(frozen=True)
+class RecordedListing:
+    id: int
+    item_id: int
+    listing: Listing
+    first_seen: datetime
+    last_seen: datetime
+    ended_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ListingChanges:
+    """What one look at a marketplace found, compared with the look before."""
+
+    new: list[RecordedListing]
+    repriced: list[RecordedListing]
+    ended: list[RecordedListing]
+
 
 @dataclass(frozen=True)
 class Sale:

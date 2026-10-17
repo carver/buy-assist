@@ -20,7 +20,9 @@ import httpx2
 from pydantic import BaseModel, ValidationError
 
 from buy_assist.models import (
+    SALE_CONDITION_LIMIT,
     Edition,
+    Listing,
     Marketplace,
     Sale,
     checked_sale,
@@ -31,6 +33,7 @@ from buy_assist.models import (
 _API = "https://api.geekdo.com/api"
 _GAME_PATH = re.compile(r"/(?:boardgame|boardgameexpansion)/(\d+)(?:/|$)")
 _MIN_INTERVAL_SECONDS = 5.0
+_EDITION_IN_TITLE = re.compile(r"\(([^()]*)\)\s*$")
 _USER_AGENT = "buy-assist/0.1 (household shopping list)"
 
 
@@ -117,6 +120,13 @@ class BggApi:
         history = self._get(_PriceHistoryAnswer, "/market/products/pricehistory", params)
         sales = [s for entry in history.items if (s := entry.sale())]
         return sorted(sales, key=lambda s: s.sold_on, reverse=True)
+
+    def us_listings(self, game_id: str) -> list[Listing]:
+        """Active GeekMarket listings a US buyer can pay for in dollars, cheapest first."""
+        params = {"objectid": game_id, "objecttype": "thing", "pageid": "1"}
+        products = self._get(_ProductsAnswer, "/market/products", params).products
+        listings = [listing for p in products if (listing := p.us_listing())]
+        return sorted(listings, key=lambda listing: listing.price_cents)
 
     def _get[T: BaseModel](self, answer: type[T], path: str, params: dict[str, str]) -> T:
         self._throttle.wait()
@@ -256,6 +266,55 @@ class _MarketSale(BaseModel):
             title=self.notes or "",
         )
         return checked_sale(sale, date.today())
+
+
+class _ProductVersion(BaseModel):
+    name: str | None = None
+
+
+class _Seller(BaseModel):
+    state: str | None = None
+
+
+class _Product(BaseModel):
+    productid: str
+    price: str | None = None
+    currency: str | None = None
+    prettycondition: str | None = None
+    conditioncode: str | None = None
+    productstate: str | None = None
+    itemlocation_code: str | None = None
+    version: _ProductVersion | None = None
+    linkeduser: _Seller | None = None
+
+    def us_listing(self) -> Listing | None:
+        """This product as a listing, or None unless it's active, in dollars and in the US."""
+        if (self.productstate, self.currency, self.itemlocation_code) != ("active", "USD", "US"):
+            return None
+        try:
+            price = Decimal(self.price or "")
+        except InvalidOperation:
+            return None
+        if not price.is_finite() or price <= 0:
+            return None
+        title = optional_text(self.version.name) if self.version else None
+        edition = _EDITION_IN_TITLE.search(title) if title else None
+        condition = optional_text(self.prettycondition) or "Unknown"
+        return Listing(
+            marketplace=Marketplace.BGG,
+            external_id=self.productid,
+            title=title or "GeekMarket listing",
+            url=f"https://boardgamegeek.com/market/product/{self.productid}",
+            price_cents=round(price * 100),
+            is_new=self.conditioncode == "n",
+            condition=condition[:SALE_CONDITION_LIMIT],
+            edition=edition.group(1) if edition else None,
+            origin_state=optional_text(self.linkeduser.state) if self.linkeduser else None,
+        )
+
+
+class _ProductsAnswer(BaseModel):
+    products: list[_Product]
 
 
 class _PriceHistoryAnswer(BaseModel):
