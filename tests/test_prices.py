@@ -27,8 +27,20 @@ def test_summary_splits_new_and_used_prices() -> None:
         ]
     )
 
-    assert summary.new == PriceStats(count=3, low_cents=3600, median_cents=4000, high_cents=5000)
-    assert summary.used == PriceStats(count=2, low_cents=2000, median_cents=2750, high_cents=3500)
+    assert summary.new == PriceStats(
+        count=3, low_cents=3600, median_cents=4000, high_cents=5000, median_all_in_cents=4000
+    )
+    assert summary.used == PriceStats(
+        count=2, low_cents=2000, median_cents=2750, high_cents=3500, median_all_in_cents=2750
+    )
+
+
+def test_summary_all_in_median_uses_the_given_full_price() -> None:
+    summary = summarize_sales(
+        [sale(40, is_new=True), sale(36, is_new=True)], lambda s: s.price_cents + 1000
+    )
+    assert summary.new is not None
+    assert summary.new.median_all_in_cents == 4800
 
 
 def test_summary_of_no_sales_is_empty() -> None:

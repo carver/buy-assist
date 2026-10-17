@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import sale_price %}
+{% from "macros.html" import full_price %}
 {% block title %}{{ item.fields.name }} · Buy Assistant{% endblock %}
 {% block main %}
 {% set f = item.fields %}
@@ -25,17 +25,47 @@
 
 <section>
   <h2>Listings</h2>
+  {% if listings %}
+  <ul class="sales listings">
+    {% for recorded, price in listings %}
+    {% set listing = recorded.listing %}
+    <li>
+      <div class="sale-head">
+        {{ full_price(price) }}
+        <span>{{ listing.condition }}</span>
+      </div>
+      <div><a href="{{ listing.url }}" target="_blank" rel="noreferrer">{{ listing.title }}</a></div>
+      <div class="aside">{{ listing.marketplace.label }}{% if listing.origin_state %} · ships from {{ listing.origin_state }}{% endif %} · seen since {{ recorded.first_seen.strftime("%b %-d") }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
   <p class="empty">No listings found yet.</p>
+  {% endif %}
 </section>
 <section>
   <h2>Price history</h2>
-  <p class="empty">No prices recorded yet.</p>
+  {% if gone %}
+  <ul class="sales">
+    {% for recorded, price in gone %}
+    <li>
+      <div class="sale-head">
+        {{ full_price(price) }}
+        <span class="aside">{{ recorded.listing.marketplace.label }} · listed {{ recorded.first_seen.strftime("%b %-d") }}, gone {{ recorded.ended_at.strftime("%b %-d") }}</span>
+      </div>
+      <div class="sale-title">{{ recorded.listing.title }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No listings have come and gone yet.</p>
+  {% endif %}
 </section>
 <section>
   <h2>Sold prices</h2>
   {% if sales %}
   <table class="summary">
-    <thead><tr><th></th><th class="num">Sales</th><th class="num">Low</th><th class="num">Median</th><th class="num">High</th></tr></thead>
+    <thead><tr><th></th><th class="num">Sales</th><th class="num">Low</th><th class="num">Median</th><th class="num">High</th><th class="num">All-in</th></tr></thead>
     <tbody>
       {% for label, stats, css in [("New", summary.new, "summary-new"), ("Used", summary.used, "summary-used")] %}
       <tr class="{{ css }}">
@@ -45,20 +75,21 @@
         <td class="num">${{ stats.low_cents | dollars }}</td>
         <td class="num">${{ stats.median_cents | dollars }}</td>
         <td class="num">${{ stats.high_cents | dollars }}</td>
+        <td class="num">${{ stats.median_all_in_cents | dollars }}</td>
         {% else %}
-        <td colspan="4" class="empty">none yet</td>
+        <td colspan="5" class="empty">none yet</td>
         {% endif %}
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="aside">Item prices, before shipping.</p>
+  <p class="aside">Low, median and high are item prices. All-in is the median with shipping (estimated when the sale doesn't say) and any tax.</p>
   <ul class="sales">
-    {% for recorded in sales %}
+    {% for recorded, price in sales %}
     {% set sale = recorded.sale %}
     <li>
       <div class="sale-head">
-        {{ sale_price(sale) }}
+        {{ full_price(price) }}
         <span>{{ sale.condition }}</span>
         <span class="aside">{{ sale.sold_on.strftime("%b %-d, %Y") }} · {{ sale.source.label }}</span>
         <form method="post" action="/items/{{ item.id }}/sales/{{ recorded.id }}/remove" hx-confirm="Remove this sale?">

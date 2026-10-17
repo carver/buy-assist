@@ -7,6 +7,7 @@ from buy_assist.links import LinkError, LinkFacts
 from buy_assist.models import Condition, Edition, ItemFields, Marketplace, Sale
 from buy_assist.paste import PastedSale
 from buy_assist.sold import SoldPriceError
+from buy_assist.usps import Origin, ShippingEstimate
 from tests.fixtures import BGG_URL, EXIT_NAME
 
 IMAGE_URL = "https://cf.geekdo-images.com/pic6632318.jpg"
@@ -160,3 +161,10 @@ def item_form(**overrides: str | list[str]) -> dict[str, str | list[str]]:
         "watcher_ids": ["2"],
     }
     return form | overrides
+
+
+class FixedQuoter:
+    """Every package ships for about $10 (USPS, est.), anywhere."""
+
+    def quote(self, item: ItemFields, origin: Origin) -> ShippingEstimate | None:
+        return ShippingEstimate(low_cents=900, typical_cents=1000, high_cents=1600)

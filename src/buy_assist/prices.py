@@ -1,6 +1,6 @@
 """Summaries of what items sell for."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 from statistics import median
@@ -15,32 +15,39 @@ class PriceStats:
     low_cents: int
     median_cents: int
     high_cents: int
+    median_all_in_cents: int
+    """Median with shipping (known or estimated) and any tax."""
 
 
 @dataclass(frozen=True)
 class SalesSummary:
-    """Item prices before shipping, split so new and used can be compared."""
+    """Sale prices, split so new and used can be compared."""
 
     new: PriceStats | None
     used: PriceStats | None
 
 
-def summarize_sales(sales: Iterable[Sale]) -> SalesSummary:
+def summarize_sales(
+    sales: Iterable[Sale], all_in: Callable[[Sale], int] = lambda sale: sale.price_cents
+) -> SalesSummary:
+    """`all_in` gives a sale's full price; by default, just its item price."""
     sales = list(sales)
     return SalesSummary(
-        new=_stats([s.price_cents for s in sales if s.is_new]),
-        used=_stats([s.price_cents for s in sales if not s.is_new]),
+        new=_stats([s for s in sales if s.is_new], all_in),
+        used=_stats([s for s in sales if not s.is_new], all_in),
     )
 
 
-def _stats(prices: list[int]) -> PriceStats | None:
-    if not prices:
+def _stats(sales: list[Sale], all_in: Callable[[Sale], int]) -> PriceStats | None:
+    if not sales:
         return None
+    prices = [s.price_cents for s in sales]
     return PriceStats(
         count=len(prices),
         low_cents=min(prices),
         median_cents=round(median(prices)),
         high_cents=max(prices),
+        median_all_in_cents=round(median(all_in(s) for s in sales)),
     )
 
 

@@ -6,7 +6,13 @@ from fastapi.testclient import TestClient
 
 from buy_assist.store import Store
 from buy_assist.web import Services, create_app
-from tests.web_fakes import FakeLinkReader, FakeParser, FakeSalesParser, FakeSoldPrices
+from tests.web_fakes import (
+    FakeLinkReader,
+    FakeParser,
+    FakeSalesParser,
+    FakeSoldPrices,
+    FixedQuoter,
+)
 
 
 @pytest.fixture
@@ -45,7 +51,15 @@ def client(
     sales_parser: FakeSalesParser,
     tmp_path: Path,
 ) -> Iterator[TestClient]:
-    services = Services(parser=parser, links=links, sold_prices=sold, sales_parser=sales_parser)
+    services = Services(
+        parser=parser,
+        links=links,
+        sold_prices=sold,
+        sales_parser=sales_parser,
+        listing_sources=[],
+        shipping=FixedQuoter(),
+        mailer=None,
+    )
     with TestClient(create_app(tmp_path / "buy.db", services)) as client:
         yield client
 

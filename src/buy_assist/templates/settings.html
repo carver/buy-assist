@@ -11,6 +11,41 @@
   <button>Save</button>
 </form>
 
+<h2>Email</h2>
+<p class="aside">Alerts and the 11:30am digest go to these addresses. Leave one blank for no email.</p>
+<form method="post" action="/settings/people" class="stack">
+  {% for user in users %}
+  <label for="email_{{ user.id }}">{{ user.name }}</label>
+  <input id="email_{{ user.id }}" name="email_{{ user.id }}" type="email" value="{{ user.email or "" }}">
+  {% endfor %}
+  <button>Save</button>
+</form>
+
+<h2>App address</h2>
+<p class="aside">How you reach this app, so emails can link to item pages.</p>
+<form method="post" action="/settings/app" class="stack">
+  <input name="app_address" type="url" value="{{ app_address }}" placeholder="http://your-host.your-tailnet.ts.net:6767" aria-label="App address">
+  <button>Save</button>
+</form>
+
+<h2>Sales tax</h2>
+<p class="aside">Added to full prices where the marketplace collects it (eBay does; GeekMarket doesn't). Clear a rate to remove it.</p>
+<table class="domains">
+  <thead><tr><th>ZIP</th><th>Rate</th></tr></thead>
+  <tbody>
+    {% for zip_code, percent in tax_rates.items() %}
+    <tr><td>{{ zip_code }}</td><td>{{ "%g" | format(percent) }}%</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="empty">No rates yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="/settings/tax" class="row tax-form">
+  <div><label for="tax_zip">ZIP</label><input id="tax_zip" name="zip" inputmode="numeric" required></div>
+  <div><label for="tax_rate">Rate (%)</label><input id="tax_rate" name="rate_percent" inputmode="decimal" placeholder="8.625"></div>
+  <div><button>Set rate</button></div>
+</form>
+
 <h2>Reference links</h2>
 {% if domains %}
 <table class="domains">

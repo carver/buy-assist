@@ -123,3 +123,8 @@ button.link { background: none; border: none; padding: 0; color: var(--muted); t
 .paste summary { cursor: pointer; color: var(--accent); }
 .steps { padding-left: 1.2rem; color: var(--muted); }
 a.button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
+
+.all-in { color: var(--muted); font-size: 0.9rem; }
+.listings a { overflow-wrap: anywhere; }
+.tax-form { margin-top: 0.75rem; align-items: flex-end; }
+.tax-form button { margin-top: 0.35rem; }

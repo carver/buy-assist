@@ -1,5 +1,6 @@
 """What every route shares: the services, who's viewing, the item in the URL, and rendering."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -11,10 +12,13 @@ from fastapi.templating import Jinja2Templates
 from buy_assist.ebay import sold_search_url
 from buy_assist.forms import format_box, format_dollars, format_pounds
 from buy_assist.links import LinkReader
+from buy_assist.listings import ListingSource
+from buy_assist.mailer import Mailer
 from buy_assist.models import Condition, Item, User
 from buy_assist.parser import ItemParser
 from buy_assist.paste import SalesParser
 from buy_assist.prices import summarize_sales
+from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceSource
 from buy_assist.store import Store
 
@@ -34,6 +38,9 @@ class Services:
     links: LinkReader
     sold_prices: SoldPriceSource
     sales_parser: SalesParser
+    listing_sources: Sequence[ListingSource]
+    shipping: ShippingQuoter
+    mailer: Mailer | None
 
 
 class NoIdentity(Exception):
@@ -91,7 +98,12 @@ def item_page(
     request: Request, me: User, item: Item, messages: list[str] | None = None
 ) -> HTMLResponse:
     store = store_of(request)
-    sales = store.sales(item.id)
+    pricer = Pricer(store, _services(request).shipping)
+    sales = [(r, pricer.sale(item.fields, r.sale)) for r in store.sales(item.id)]
+    listings = [
+        (r, pricer.listing(item.fields, r.listing))
+        for r in store.listings(item.id, include_ended=True)
+    ]
     return render(
         request,
         "item.html",
@@ -99,7 +111,17 @@ def item_page(
         item=item,
         home_zip=store.home_zip(),
         sales=sales,
-        summary=summarize_sales(r.sale for r in sales),
+        listings=sorted(
+            ((r, p) for r, p in listings if r.ended_at is None), key=lambda rp: rp[1].total_cents
+        ),
+        gone=sorted(
+            ((r, p) for r, p in listings if r.ended_at is not None),
+            key=lambda rp: rp[0].ended_at or rp[0].last_seen,
+            reverse=True,
+        ),
+        summary=summarize_sales(
+            (r.sale for r, _ in sales), lambda sale: pricer.sale(item.fields, sale).total_cents
+        ),
         ebay_sold_url=sold_search_url(item.fields),
         sold_source=_services(request).sold_prices,
         messages=messages or [],

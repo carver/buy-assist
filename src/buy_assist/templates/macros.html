@@ -1,3 +1,8 @@
 {% macro sale_price(sale) -%}
 <span class="price">${{ sale.price_cents | dollars }}{% if sale.shipping_cents %} <small>+ ${{ sale.shipping_cents | dollars }} ship</small>{% elif sale.shipping_cents == 0 %} <small>free ship</small>{% endif %}</span>
 {%- endmacro %}
+
+{% macro full_price(p) -%}
+<span class="price">${{ p.item_cents | dollars }}{% if p.shipping_cents == 0 %} <small>free ship</small>{% elif p.shipping_cents %} <small>+ {% if p.shipping_estimated %}~{% endif %}${{ p.shipping_cents | dollars }} ship{% if p.shipping_estimated %} (est.){% endif %}</small>{% endif %}{% if p.tax_cents %} <small>+ ${{ p.tax_cents | dollars }} tax</small>{% endif %}</span>
+<span class="all-in">${{ p.total_cents | dollars }} all-in{% if not p.complete %}<small>{% if p.shipping_cents is none %}, shipping unknown{% endif %}{% if p.tax_cents is none %}, tax rate not set{% endif %}</small>{% endif %}</span>
+{%- endmacro %}
