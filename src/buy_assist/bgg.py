@@ -11,14 +11,21 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
 
 import httpx2
 from pydantic import BaseModel, ValidationError
 
-from buy_assist.models import Edition, Sale, SaleSource, optional_text, url_domain
+from buy_assist.models import (
+    Edition,
+    Sale,
+    SaleSource,
+    checked_sale,
+    optional_text,
+    url_domain,
+)
 
 _API = "https://api.geekdo.com/api"
 _GAME_PATH = re.compile(r"/(?:boardgame|boardgameexpansion)/(\d+)(?:/|$)")
@@ -202,18 +209,19 @@ class _MarketSale(BaseModel):
             sold_at = datetime.fromisoformat(self.usaledate)
         except InvalidOperation, ValueError:
             return None
-        if not price.is_finite() or price <= 0:
+        if not price.is_finite():
             return None
         condition = optional_text(self.condition) or "Unknown"
-        return Sale(
+        sale = Sale(
             source=SaleSource.BGG,
             source_id=self.itemid,
             sold_on=sold_at.date(),
-            price_cents=int(price * 100),
+            price_cents=round(price * 100),
             is_new=condition == "New",
             condition=condition,
-            title=" ".join((self.notes or "").split())[:300],
+            title=self.notes or "",
         )
+        return checked_sale(sale, date.today())
 
 
 class _PriceHistoryAnswer(BaseModel):

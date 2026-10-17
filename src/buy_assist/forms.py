@@ -21,6 +21,7 @@ class ItemForm:
     model_number: str = ""
     reference_url: str = ""
     image_url: str = ""
+    search_query: str = ""
     variant: str = ""
     zip: str = ""
     target_price: str = ""
@@ -41,6 +42,7 @@ class ItemForm:
             model_number=item_fields.model_number or "",
             reference_url=item_fields.reference_url or "",
             image_url=item_fields.image_url or "",
+            search_query=item_fields.search_query or "",
             variant=item_fields.variant or "",
             zip=item_fields.zip or "",
             target_price=format_dollars(item_fields.target_price_cents),
@@ -82,6 +84,7 @@ class ItemForm:
             model_number=optional_text(self.model_number),
             reference_url=optional_text(url),
             image_url=optional_text(image_url),
+            search_query=optional_text(self.search_query),
             variant=optional_text(self.variant),
             zip=optional_text(self.zip),
             target_price_cents=target_price_cents,

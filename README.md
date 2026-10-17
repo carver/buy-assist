@@ -20,6 +20,7 @@ An item has:
 - name
 - identifiers when known: UPC, eBay product ID (EPID), model number
 - reference link, such as a BoardGameGeek page
+- search words: a short query for marketplace searches, drafted by Claude
 - variant (size, color, edition) and acceptable condition (new, used, any)
 - shipping zip, defaulting to home
 - watchers: Jason, Shira, or both
@@ -44,8 +45,8 @@ eBay first, through the Browse API. It searches active listings by keyword, UPC 
 
 The Browse API doesn't return sold prices, and there's no free automated way to get them (see `docs/research/sold-prices.md`). Sold prices come from two places:
 
-- BoardGameGeek GeekMarket price history, for items with a BGG link. It's an undocumented JSON endpoint, so we only make small targeted lookups, at most one request every 5 seconds, which BGG's API wiki gives as the safe gap.
-- Pasting by hand. The item page links to eBay's sold search for the item. Shira signs in, copies the results and pastes them into the page, and Claude pulls out date, price and condition.
+- BoardGameGeek GeekMarket price history, for items with a BGG link, fetched right after the item is saved and on demand from the item page. It's an undocumented JSON endpoint, so we only make small targeted lookups; every BGG call shares one throttle of one request every 5 seconds, which BGG's API wiki gives as the safe gap.
+- Pasting by hand. The item page links to eBay's sold search for the item's search words. Shira signs in, copies the results and pastes them into the page. Claude pulls out each sale and unchecks ones that don't look like the item (parts, other editions, lots); she reviews the list and saves.
 
 A paid eBay sold-data API is the upgrade if pasting gets tedious. Each item needs one backfill when it's added, and no refresh after that, since the daily search sees new listings as they appear.
 
@@ -56,6 +57,8 @@ Later candidates: BoardGameGeek's GeekMarket for games, Etsy.
 We keep our own record of every listing: asking price over time, and when it disappeared. A listing that disappears may have sold or expired, and the Browse API can't tell us which. Sold prices from the backfill go in a separate table.
 
 Each new listing gets ranked against the history ("cheapest of 14 seen, median $62").
+
+The item page summarises sold prices in two rows, new and used, so the premium for new is visible.
 
 ## Alerts
 

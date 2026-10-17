@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Check sales · {{ item.fields.name }} · Buy Assistant{% endblock %}
+{% block main %}
+<h1>Check these sales</h1>
+<p class="aside">For <a href="/items/{{ item.id }}">{{ item.fields.name }}</a>. Unchecked rows don't look like this item; check any that are.</p>
+<form method="post" action="/items/{{ item.id }}/sales/save">
+  <input type="hidden" name="rows" value="{{ rows_json }}">
+  <ul class="sales preview">
+    {% for row in rows %}
+    {% set sale = row.sale %}
+    <li{% if not row.matches %} class="doubtful"{% endif %}>
+      <label class="check">
+        <input type="checkbox" name="selected" value="{{ loop.index0 }}"{% if row.matches %} checked{% endif %}>
+        <span class="sale-head">
+          <span class="price">${{ sale.price_cents | dollars }}{% if sale.shipping_cents %} <small>+ ${{ sale.shipping_cents | dollars }} ship</small>{% elif sale.shipping_cents == 0 %} <small>free ship</small>{% endif %}</span>
+          <span>{{ sale.condition }}</span>
+          <span class="aside">{{ sale.sold_on.strftime("%b %-d, %Y") }}</span>
+        </span>
+      </label>
+      <div class="sale-title">{{ sale.title }}</div>
+      {% if row.reason %}<div class="reason">{{ row.reason }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="actions">
+    <button>Save checked sales</button>
+    <a href="/items/{{ item.id }}" class="button secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

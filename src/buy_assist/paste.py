@@ -12,12 +12,16 @@ from datetime import date
 from typing import Any, Protocol
 
 from buy_assist.claude import ParseError, Runner, claude_json
-from buy_assist.models import ItemFields, Sale, SaleSource, optional_text
+from buy_assist.models import (
+    SALE_TITLE_LIMIT,
+    ItemFields,
+    Sale,
+    SaleSource,
+    checked_sale,
+    optional_text,
+)
 
 _MAX_PASTE_CHARS = 200_000
-_EARLIEST_SALE = date(2000, 1, 1)
-_MAX_TITLE = 300
-_MAX_CONDITION = 60
 
 _SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -123,29 +127,30 @@ def _pasted_sale(row: dict[str, Any], text: str, today: date) -> PastedSale | No
     shipping = row.get("shipping_dollars")
     shipping_cents = None if shipping is None else _cents(shipping, allow_zero=True)
     title = optional_text(row.get("title"))
-    condition = optional_text(row.get("condition"))
     if (
-        not _EARLIEST_SALE <= sold_on <= today
-        or price_cents is None
+        price_cents is None
         or not _shown_in(price_cents, text)
         or (shipping is not None and shipping_cents is None)
         or not title
-        or not condition
     ):
         return None
-    reason = optional_text(row.get("reason")) or ""
-    return PastedSale(
-        sale=Sale(
+    sale = checked_sale(
+        Sale(
             source=SaleSource.EBAY,
             sold_on=sold_on,
             price_cents=price_cents,
             shipping_cents=shipping_cents,
             is_new=row.get("is_new") is True,
-            condition=condition[:_MAX_CONDITION],
-            title=title[:_MAX_TITLE],
+            condition=optional_text(row.get("condition")) or "",
+            title=title,
         ),
-        matches=row.get("matches") is not False,
-        reason=reason[:_MAX_TITLE],
+        today,
+    )
+    if sale is None:
+        return None
+    reason = optional_text(row.get("reason")) or ""
+    return PastedSale(
+        sale=sale, matches=row.get("matches") is not False, reason=reason[:SALE_TITLE_LIMIT]
     )
 
 

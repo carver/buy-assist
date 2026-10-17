@@ -224,3 +224,22 @@ def test_summary_of_no_sales_is_empty() -> None:
     summary = summarize_sales([])
     assert summary.new is None
     assert summary.used is None
+
+
+def test_removed_sale_stays_removed_when_seen_again(tmp_path: Path) -> None:
+    store = Store.open(tmp_path / "buy.db")
+    item = store.create_item(ItemFields(name="Calendar"))
+    sales = [bgg_sale("1", date(2023, 5, 4), 35), ebay_sale(date(2025, 1, 2), 30, "EXIT cal")]
+    store.add_sales(item.id, sales)
+    for recorded in store.sales(item.id):
+        store.remove_sale(item.id, recorded.id)
+
+    assert store.add_sales(item.id, sales) == 0
+    assert store.sales(item.id) == []
+
+
+def test_pasted_sale_with_respaced_title_is_the_same_sale(tmp_path: Path) -> None:
+    store = Store.open(tmp_path / "buy.db")
+    item = store.create_item(ItemFields(name="Calendar"))
+    store.add_sales(item.id, [ebay_sale(date(2025, 1, 2), 30, "EXIT  Advent calendar ")])
+    assert store.add_sales(item.id, [ebay_sale(date(2025, 1, 2), 30, "exit advent Calendar")]) == 0

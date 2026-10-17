@@ -1,120 +1,21 @@
 import html
 import re
-from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from buy_assist.links import Edition, LinkError, LinkFacts
+from buy_assist.links import LinkFacts
 from buy_assist.models import Condition, ItemFields
-from buy_assist.parser import ParseError
 from buy_assist.store import Store
-from buy_assist.web import create_app
 from tests.fixtures import BGG_URL, EXIT_NAME
-
-IMAGE_URL = "https://cf.geekdo-images.com/pic6632318.jpg"
-ENGLISH = Edition(
-    name="English edition",
-    title=EXIT_NAME,
-    product_code="681951",
-    year="2022",
-    languages=("English",),
-    publishers=("KOSMOS",),
+from tests.web_fakes import (
+    BGG_FACTS,
+    GERMAN,
+    IMAGE_URL,
+    FakeLinkReader,
+    FakeParser,
+    item_form,
 )
-GERMAN = Edition(
-    name="German edition",
-    title="EXIT: Das Spiel - Adventskalender",
-    product_code=None,
-    year="2021",
-    languages=("German",),
-    publishers=("KOSMOS",),
-)
-BGG_FACTS = LinkFacts(
-    source="BoardGameGeek", name=EXIT_NAME, image_url=IMAGE_URL, editions=(GERMAN, ENGLISH)
-)
-
-
-class FakeParser:
-    def __init__(self) -> None:
-        self.requests: list[tuple[str, LinkFacts | None]] = []
-        self.fail = False
-
-    def parse(self, text: str, link: LinkFacts | None = None) -> ItemFields:
-        self.requests.append((text, link))
-        if self.fail:
-            raise ParseError("claude-json exited 1")
-        return ItemFields(
-            name=EXIT_NAME,
-            condition=Condition.NEW,
-            reference_url=BGG_URL,
-            image_url=link.image_url if link else None,
-            variant="English edition" if link and ENGLISH in link.editions else None,
-            model_number="681951" if link and link.editions else None,
-            target_price_cents=3500,
-        )
-
-
-class FakeLinkReader:
-    def __init__(self) -> None:
-        self.urls: list[str] = []
-        self.error: str | None = None
-        self.facts = BGG_FACTS
-
-    def read(self, url: str) -> LinkFacts:
-        self.urls.append(url)
-        if self.error:
-            raise LinkError(self.error)
-        return self.facts
-
-
-@pytest.fixture
-def store(tmp_path: Path) -> Store:
-    store = Store.open(tmp_path / "buy.db")
-    store.set_home_zip("94110")
-    return store
-
-
-@pytest.fixture
-def parser() -> FakeParser:
-    return FakeParser()
-
-
-@pytest.fixture
-def links() -> FakeLinkReader:
-    return FakeLinkReader()
-
-
-@pytest.fixture
-def client(
-    store: Store, parser: FakeParser, links: FakeLinkReader, tmp_path: Path
-) -> Iterator[TestClient]:
-    with TestClient(create_app(tmp_path / "buy.db", parser, links)) as client:
-        yield client
-
-
-@pytest.fixture
-def shira(client: TestClient, store: Store) -> TestClient:
-    shira = store.users()[1]
-    client.post("/whoami", data={"user_id": str(shira.id)})
-    return client
-
-
-def item_form(**overrides: str | list[str]) -> dict[str, str | list[str]]:
-    form: dict[str, str | list[str]] = {
-        "name": EXIT_NAME,
-        "condition": "new",
-        "upc": "",
-        "epid": "",
-        "model_number": "",
-        "reference_url": BGG_URL,
-        "variant": "",
-        "zip": "94110",
-        "target_price": "35",
-        "notes": "",
-        "watcher_ids": ["2"],
-    }
-    return form | overrides
 
 
 def test_visitor_without_identity_is_asked_who_they_are(client: TestClient) -> None:

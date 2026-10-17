@@ -1,7 +1,7 @@
 """Domain types shared by the store, the parser and the web app."""
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum
 from urllib.parse import urlsplit
@@ -66,6 +66,25 @@ class Sale:
     title: str = ""
     shipping_cents: int | None = None
     source_id: str | None = None
+
+
+EARLIEST_SALE = date(2000, 1, 1)
+SALE_TITLE_LIMIT = 300
+SALE_CONDITION_LIMIT = 60
+
+
+def checked_sale(sale: Sale, today: date) -> Sale | None:
+    """The sale with its text tidied and capped, or None if it can't be a real sale.
+    Sales come from untrusted pages, so every source runs them through this."""
+    condition = " ".join(sale.condition.split())[:SALE_CONDITION_LIMIT]
+    if (
+        not condition
+        or sale.price_cents <= 0
+        or (sale.shipping_cents is not None and sale.shipping_cents < 0)
+        or not EARLIEST_SALE <= sale.sold_on <= today
+    ):
+        return None
+    return replace(sale, condition=condition, title=" ".join(sale.title.split())[:SALE_TITLE_LIMIT])
 
 
 @dataclass(frozen=True)

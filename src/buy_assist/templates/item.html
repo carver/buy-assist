@@ -4,11 +4,13 @@
 {% set f = item.fields %}
 <h1>{{ f.name }}</h1>
 {% if f.image_url %}<img src="{{ f.image_url }}" alt="" class="photo">{% endif %}
+{% for message in messages %}<p class="notice">{{ message }}</p>{% endfor %}
 {% if not item.is_open %}<p class="notice">Closed {{ item.closed_at.strftime("%b %-d, %Y") }}</p>{% endif %}
 <dl class="facts">
   <dt>Target</dt><dd>{% if f.target_price_cents is not none %}${{ f.target_price_cents | dollars }} all-in{% else %}not set yet{% endif %}</dd>
   <dt>Condition</dt><dd>{{ f.condition.value }}</dd>
   {% if f.variant %}<dt>Variant</dt><dd>{{ f.variant }}</dd>{% endif %}
+  {% if f.search_query %}<dt>Search words</dt><dd>{{ f.search_query }}</dd>{% endif %}
   {% if f.upc %}<dt>UPC</dt><dd>{{ f.upc }}</dd>{% endif %}
   {% if f.epid %}<dt>eBay product ID</dt><dd>{{ f.epid }}</dd>{% endif %}
   {% if f.model_number %}<dt>Model number</dt><dd>{{ f.model_number }}</dd>{% endif %}
@@ -28,7 +30,65 @@
 </section>
 <section>
   <h2>Sold prices</h2>
+  {% if sales %}
+  <table class="summary">
+    <thead><tr><th></th><th class="num">Sales</th><th class="num">Low</th><th class="num">Median</th><th class="num">High</th></tr></thead>
+    <tbody>
+      {% for label, stats, css in [("New", summary.new, "summary-new"), ("Used", summary.used, "summary-used")] %}
+      <tr class="{{ css }}">
+        <th>{{ label }}</th>
+        {% if stats %}
+        <td class="num">{{ stats.count }}</td>
+        <td class="num">${{ stats.low_cents | dollars }}</td>
+        <td class="num">${{ stats.median_cents | dollars }}</td>
+        <td class="num">${{ stats.high_cents | dollars }}</td>
+        {% else %}
+        <td colspan="4" class="empty">none yet</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="aside">Item prices, before shipping.</p>
+  <ul class="sales">
+    {% for recorded in sales %}
+    {% set sale = recorded.sale %}
+    <li>
+      <div class="sale-head">
+        <span class="price">${{ sale.price_cents | dollars }}{% if sale.shipping_cents %} <small>+ ${{ sale.shipping_cents | dollars }} ship</small>{% elif sale.shipping_cents == 0 %} <small>free ship</small>{% endif %}</span>
+        <span>{{ sale.condition }}</span>
+        <span class="aside">{{ sale.sold_on.strftime("%b %-d, %Y") }} · {{ "BoardGameGeek" if sale.source.value == "bgg" else "eBay" }}</span>
+        <form method="post" action="/items/{{ item.id }}/sales/{{ recorded.id }}/remove" hx-confirm="Remove this sale?">
+          <button class="link">remove</button>
+        </form>
+      </div>
+      {% if sale.title %}<div class="sale-title">{{ sale.title }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
   <p class="empty">No sold prices yet.</p>
+  {% endif %}
+
+  <div class="sold-actions">
+    {% if sold_source.covers(f) %}
+    <form method="post" action="/items/{{ item.id }}/sales/refresh">
+      <button class="secondary">Refresh sold prices <span class="busy">· asking {{ sold_source.label }}…</span></button>
+    </form>
+    {% endif %}
+  </div>
+  <details class="paste">
+    <summary>Add eBay sold prices</summary>
+    <ol class="steps">
+      <li>Open <a href="{{ ebay_sold_url }}" target="_blank" rel="noreferrer">eBay sold listings for this item</a>, signed in.</li>
+      <li>Select the results on the page and copy them.</li>
+      <li>Paste them here. Claude picks out each sale for you to check.</li>
+    </ol>
+    <form method="post" action="/items/{{ item.id }}/sales/paste" class="stack">
+      <textarea name="text" rows="6" required aria-label="Pasted eBay results"></textarea>
+      <button>Read sales <span class="busy">· asking Claude…</span></button>
+    </form>
+  </details>
 </section>
 
 <div class="actions">

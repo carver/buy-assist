@@ -144,14 +144,19 @@ class Store:
         """An item's recorded sales, newest first."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM sales WHERE item_id = ? ORDER BY sold_on DESC, id DESC", (item_id,)
+                "SELECT * FROM sales WHERE item_id = ? AND removed_at IS NULL"
+                " ORDER BY sold_on DESC, id DESC",
+                (item_id,),
             ).fetchall()
         return [_recorded_sale(row) for row in rows]
 
     def remove_sale(self, item_id: int, sale_id: int) -> bool:
+        """Hide a sale. It stays recorded, so seeing it again doesn't bring it back."""
         with self._connect() as conn:
             cursor = conn.execute(
-                "DELETE FROM sales WHERE id = ? AND item_id = ?", (sale_id, item_id)
+                "UPDATE sales SET removed_at = ?"
+                " WHERE id = ? AND item_id = ? AND removed_at IS NULL",
+                (datetime.now(UTC).isoformat(), sale_id, item_id),
             )
             return cursor.rowcount > 0
 
@@ -203,7 +208,8 @@ def _dedupe_key(sale: Sale) -> str:
     """What makes a sale the same one seen again: the source's own id when it has one."""
     if sale.source_id:
         return sale.source_id
-    return f"{sale.sold_on.isoformat()}|{sale.price_cents}|{sale.title}"
+    title = " ".join(sale.title.split()).casefold()
+    return f"{sale.sold_on.isoformat()}|{sale.price_cents}|{title}"
 
 
 def _recorded_sale(row: sqlite3.Row) -> RecordedSale:
