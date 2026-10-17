@@ -93,6 +93,7 @@ class ItemFields:
     model_number: str | None = None
     reference_url: str | None = None
     image_url: str | None = None
+    search_query: str | None = None
     variant: str | None = None
     zip: str | None = None
     target_price_cents: int | None = None

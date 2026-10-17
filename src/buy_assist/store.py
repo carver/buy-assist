@@ -3,13 +3,22 @@ across the web server's worker threads."""
 
 import sqlite3
 from collections import Counter
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import resources
 from pathlib import Path
 
-from buy_assist.models import Condition, Item, ItemFields, User, url_domain
+from buy_assist.models import (
+    Condition,
+    Item,
+    ItemFields,
+    RecordedSale,
+    Sale,
+    SaleSource,
+    User,
+    url_domain,
+)
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -103,6 +112,49 @@ class Store:
             ids = conn.execute(f"SELECT id FROM items WHERE {status} ORDER BY id").fetchall()
             return [_read_item(conn, row["id"]) for row in ids]
 
+    def add_sales(self, item_id: int, sales: Iterable[Sale]) -> int:
+        """Record sales for an item, skipping ones already recorded. Returns how many were new."""
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as conn:
+            before = conn.total_changes
+            conn.executemany(
+                "INSERT OR IGNORE INTO sales (item_id, source, dedupe_key, source_id, sold_on,"
+                " price_cents, shipping_cents, is_new, condition, title, added_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        item_id,
+                        s.source.value,
+                        _dedupe_key(s),
+                        s.source_id,
+                        s.sold_on.isoformat(),
+                        s.price_cents,
+                        s.shipping_cents,
+                        s.is_new,
+                        s.condition,
+                        s.title,
+                        now,
+                    )
+                    for s in sales
+                ],
+            )
+            return conn.total_changes - before
+
+    def sales(self, item_id: int) -> list[RecordedSale]:
+        """An item's recorded sales, newest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM sales WHERE item_id = ? ORDER BY sold_on DESC, id DESC", (item_id,)
+            ).fetchall()
+        return [_recorded_sale(row) for row in rows]
+
+    def remove_sale(self, item_id: int, sale_id: int) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM sales WHERE id = ? AND item_id = ?", (sale_id, item_id)
+            )
+            return cursor.rowcount > 0
+
     def reference_domain_counts(self) -> dict[str, int]:
         """How many items, open or closed, link to each reference domain."""
         with self._connect() as conn:
@@ -134,6 +186,7 @@ _ITEM_COLUMN_NAMES = (
     "model_number",
     "reference_url",
     "image_url",
+    "search_query",
     "variant",
     "zip",
     "target_price_cents",
@@ -144,6 +197,30 @@ _ITEM_COLUMNS = ", ".join(_ITEM_COLUMN_NAMES)
 
 def _item_values(fields: ItemFields) -> tuple[object, ...]:
     return tuple(getattr(fields, name) for name in _ITEM_COLUMN_NAMES)
+
+
+def _dedupe_key(sale: Sale) -> str:
+    """What makes a sale the same one seen again: the source's own id when it has one."""
+    if sale.source_id:
+        return sale.source_id
+    return f"{sale.sold_on.isoformat()}|{sale.price_cents}|{sale.title}"
+
+
+def _recorded_sale(row: sqlite3.Row) -> RecordedSale:
+    return RecordedSale(
+        id=row["id"],
+        item_id=row["item_id"],
+        sale=Sale(
+            source=SaleSource(row["source"]),
+            sold_on=date.fromisoformat(row["sold_on"]),
+            price_cents=row["price_cents"],
+            is_new=bool(row["is_new"]),
+            condition=row["condition"],
+            title=row["title"],
+            shipping_cents=row["shipping_cents"],
+            source_id=row["source_id"],
+        ),
+    )
 
 
 def _set_watchers(conn: sqlite3.Connection, item_id: int, watcher_ids: frozenset[int]) -> None:
