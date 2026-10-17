@@ -69,6 +69,15 @@ class Marketplace(StrEnum):
         return self is Marketplace.EBAY
 
 
+class NoticeKind(StrEnum):
+    """Why a person heard about a listing."""
+
+    FIRST_FOUND = "first_found"
+    AT_TARGET = "at_target"
+    NEW_LOW = "new_low"
+    DIGEST = "digest"
+
+
 @dataclass(frozen=True)
 class Listing:
     """Something for sale right now, as a marketplace shows it."""

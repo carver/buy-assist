@@ -1,13 +1,16 @@
 """SQLite persistence. Each call opens its own connection, so the store is safe to share
 across the web server's worker threads."""
 
+import json
 import sqlite3
 from collections import Counter
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 from buy_assist.models import (
     Condition,
@@ -16,6 +19,7 @@ from buy_assist.models import (
     Listing,
     ListingChanges,
     Marketplace,
+    NoticeKind,
     RecordedListing,
     RecordedSale,
     Sale,
@@ -254,6 +258,97 @@ class Store:
             ).fetchall()
         domains = (url_domain(row["reference_url"]) for row in rows)
         return dict(Counter(d for d in domains if d))
+
+    def set_email(self, user_id: int, email: str | None) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+
+    def tax_rate(self, zip_code: str) -> Decimal | None:
+        """Sales tax for delivery to a ZIP, as a fraction (0.08625 for 8.625%)."""
+        return self.tax_rates().get(zip_code)
+
+    def tax_rates(self) -> dict[str, Decimal]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT zip, rate FROM tax_rates ORDER BY zip").fetchall()
+        return {row["zip"]: Decimal(row["rate"]) for row in rows}
+
+    def set_tax_rate(self, zip_code: str, rate: Decimal | None) -> None:
+        with self._connect() as conn:
+            if rate is None:
+                conn.execute("DELETE FROM tax_rates WHERE zip = ?", (zip_code,))
+            else:
+                conn.execute(
+                    "INSERT INTO tax_rates (zip, rate) VALUES (?, ?)"
+                    " ON CONFLICT (zip) DO UPDATE SET rate = excluded.rate",
+                    (zip_code, str(rate)),
+                )
+
+    def app_address(self) -> str | None:
+        """Where people reach the app, for links in email."""
+        return self._setting("app_address")
+
+    def set_app_address(self, address: str | None) -> None:
+        self._set_setting("app_address", address)
+
+    def last_run(self, job: str) -> datetime | None:
+        value = self._setting(f"last_run:{job}")
+        return datetime.fromisoformat(value) if value else None
+
+    def set_last_run(self, job: str, when: datetime) -> None:
+        self._set_setting(f"last_run:{job}", when.isoformat())
+
+    def zone_chart(self, zip3: str) -> tuple[date, Any] | None:
+        """The cached USPS zone chart for a 3-digit ZIP, and when it was fetched."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT fetched_on, data FROM zone_charts WHERE zip3 = ?", (zip3,)
+            ).fetchone()
+        if row is None:
+            return None
+        return date.fromisoformat(row["fetched_on"]), json.loads(row["data"])
+
+    def save_zone_chart(self, zip3: str, fetched_on: date, data: object) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO zone_charts (zip3, fetched_on, data) VALUES (?, ?, ?)"
+                " ON CONFLICT (zip3) DO UPDATE SET"
+                " fetched_on = excluded.fetched_on, data = excluded.data",
+                (zip3, fetched_on.isoformat(), json.dumps(data)),
+            )
+
+    def log_notice(self, listing_id: int, user_id: int, kind: NoticeKind, when: datetime) -> bool:
+        """Record that a person heard about a listing. False if they already had, this way."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO notices (listing_id, user_id, kind, sent_at)"
+                " VALUES (?, ?, ?, ?)",
+                (listing_id, user_id, kind.value, when.isoformat()),
+            )
+            return cursor.rowcount > 0
+
+    def noticed(self, listing_id: int, user_id: int) -> set[NoticeKind]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind FROM notices WHERE listing_id = ? AND user_id = ?",
+                (listing_id, user_id),
+            ).fetchall()
+        return {NoticeKind(row["kind"]) for row in rows}
+
+    def _setting(self, key: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def _set_setting(self, key: str, value: str | None) -> None:
+        with self._connect() as conn:
+            if value is None:
+                conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            else:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?)"
+                    " ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
 
     def home_zip(self) -> str | None:
         with self._connect() as conn:
