@@ -1,33 +1,28 @@
 """Read a reference link into LinkFacts: what the linked page says about the product.
 
-BoardGameGeek pages sit behind a Cloudflare challenge, so BGG links go through the JSON API
-the BGG site itself uses. Every other site gets the generic reader, which fetches the page,
-takes any structured product data, and keeps the visible text for Claude to read.
+BoardGameGeek links go through its JSON API (see bgg.py). Every other site gets the generic
+reader, which fetches the page, takes any structured product data, and keeps the visible
+text for Claude to read.
 """
 
 import ipaddress
 import json
 import re
 import socket
-import threading
 import time
-from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urljoin, urlsplit
 
 import httpx2
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, ValidationError
 
-from buy_assist.models import is_upc, optional_text, url_domain
+from buy_assist.bgg import BggApi, BggError, game_id
+from buy_assist.models import Edition, is_upc, optional_text, url_domain
 
 _URL = re.compile(r"https?://[^\s<>\"')\]]+")
 _TRAILING_PUNCTUATION = ".,;:!?"
-_BGG_GAME_PATH = re.compile(r"/(?:boardgame|boardgameexpansion)/(\d+)(?:/|$)")
-_BGG_API = "https://api.geekdo.com/api"
-_BGG_MIN_INTERVAL_SECONDS = 5.0
 _MAX_REDIRECTS = 5
 _MAX_PAGE_BYTES = 3_000_000
 _PAGE_DEADLINE_SECONDS = 20.0
@@ -42,16 +37,6 @@ type Json = dict[str, Json] | list[Json] | str | int | float | bool | None
 
 class LinkError(Exception):
     """The link couldn't be read. The message is safe to show to the person."""
-
-
-@dataclass(frozen=True)
-class Edition:
-    name: str
-    title: str
-    product_code: str | None
-    year: str | None
-    languages: tuple[str, ...]
-    publishers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -80,91 +65,39 @@ def _resolve(host: str) -> list[str]:
     return [str(info[4][0]) for info in socket.getaddrinfo(host, None)]
 
 
-class _Throttle:
-    """Keeps requests to one host at least `interval` seconds apart, across threads."""
-
-    def __init__(
-        self, interval: float, clock: Callable[[], float], sleep: Callable[[float], None]
-    ) -> None:
-        self._interval = interval
-        self._clock = clock
-        self._sleep = sleep
-        self._lock = threading.Lock()
-        self._last: float | None = None
-
-    def wait(self) -> None:
-        with self._lock:
-            if self._last is not None:
-                remaining = self._last + self._interval - self._clock()
-                if remaining > 0:
-                    self._sleep(remaining)
-            self._last = self._clock()
-
-
 class HttpLinkReader:
     def __init__(
         self,
         client: httpx2.Client,
+        bgg: BggApi,
         *,
         resolve: Callable[[str], list[str]] = _resolve,
         clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._client = client
+        self._bgg = bgg
         self._resolve = resolve
         self._clock = clock
-        self._bgg_throttle = _Throttle(_BGG_MIN_INTERVAL_SECONDS, clock, sleep)
 
     def read(self, url: str) -> LinkFacts:
         dedicated = _DEDICATED_READERS.get(url_domain(url) or "")
         return dedicated.read(self, url) if dedicated else self._read_page(url)
 
     def read_bgg(self, url: str) -> LinkFacts:
-        match = _BGG_GAME_PATH.search(urlsplit(url).path)
-        if not match:
+        bgg_id = game_id(url)
+        if bgg_id is None:
             raise LinkError("That BoardGameGeek link isn't a game page.")
-        game_id = match.group(1)
-        game = self._bgg_get(
-            _BggGameAnswer,
-            "/geekitems",
-            {"objectid": game_id, "objecttype": "thing", "nosession": "1"},
-        ).item
-        versions = self._bgg_get(
-            _BggVersionsAnswer,
-            "/geekitem/linkeditems",
-            {
-                "ajax": "1",
-                "linkdata_index": "boardgameversion",
-                "nosession": "1",
-                "objectid": game_id,
-                "objecttype": "thing",
-                "pageid": "1",
-                "showcount": "25",
-                "sort": "yearpublished",
-                "subtype": "boardgameversion",
-            },
-        )
+        try:
+            game = self._bgg.game(bgg_id)
+            editions = self._bgg.editions(bgg_id)
+        except BggError as e:
+            raise LinkError(str(e)) from e
         return LinkFacts(
             source=_BGG_LABEL,
-            name=optional_text(game.name),
-            image_url=_web_url(game.imageurl),
-            editions=_distinct_names([e for v in versions.items if (e := v.edition())]),
+            name=game.name,
+            image_url=_web_url(game.image_url),
+            editions=editions,
         )
-
-    def _bgg_get[T: BaseModel](self, answer: type[T], path: str, params: dict[str, str]) -> T:
-        self._bgg_throttle.wait()
-        try:
-            response = self._client.get(
-                _BGG_API + path, params=params, headers={"user-agent": _USER_AGENT}
-            )
-        except httpx2.HTTPError as e:
-            raise LinkError(f"BoardGameGeek didn't answer ({type(e).__name__}).") from e
-        if response.status_code != 200:
-            raise LinkError(f"BoardGameGeek answered {response.status_code}.")
-        try:
-            return answer.model_validate_json(response.content)
-        except ValidationError as e:
-            raise LinkError("BoardGameGeek's answer wasn't what this app expects.") from e
 
     def _read_page(self, url: str) -> LinkFacts:
         page = self._fetch_public(url)
@@ -244,65 +177,6 @@ DEDICATED_DOMAINS = {domain: reader.label for domain, reader in _DEDICATED_READE
 class _Page:
     url: str
     html: str
-
-
-def _distinct_names(editions: list[Edition]) -> tuple[Edition, ...]:
-    """Add the year to editions whose names repeat, so a name picks out one edition."""
-    counts = Counter(e.name for e in editions)
-    renamed = [
-        replace(e, name=f"{e.name} ({e.year})") if counts[e.name] > 1 and e.year else e
-        for e in editions
-    ]
-    seen: Counter[str] = Counter()
-    distinct: list[Edition] = []
-    for edition in renamed:
-        seen[edition.name] += 1
-        if seen[edition.name] > 1:
-            edition = replace(edition, name=f"{edition.name} #{seen[edition.name]}")
-        distinct.append(edition)
-    return tuple(distinct)
-
-
-class _BggLink(BaseModel):
-    name: str = ""
-
-
-class _BggGame(BaseModel):
-    name: str | None = None
-    imageurl: str | None = None
-
-
-class _BggGameAnswer(BaseModel):
-    item: _BggGame
-
-
-class _BggVersion(BaseModel):
-    versionname: str | None = None
-    linkedname: str | None = None
-    productcode: str | None = None
-    yearpublished: str | None = None
-    links: dict[str, list[_BggLink]] = {}
-
-    def edition(self) -> Edition | None:
-        name = optional_text(self.versionname)
-        title = optional_text(self.linkedname)
-        if not (name and title):
-            return None
-        return Edition(
-            name=name,
-            title=title,
-            product_code=optional_text(self.productcode),
-            year=optional_text(self.yearpublished),
-            languages=self._names("languages"),
-            publishers=self._names("boardgamepublisher"),
-        )
-
-    def _names(self, kind: str) -> tuple[str, ...]:
-        return tuple(link.name for link in self.links.get(kind, []) if link.name)
-
-
-class _BggVersionsAnswer(BaseModel):
-    items: list[_BggVersion]
 
 
 def _page_facts(source: str, url: str, html: str) -> LinkFacts:

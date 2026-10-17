@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from urllib.parse import urlsplit
 
@@ -35,6 +35,44 @@ class Condition(StrEnum):
     NEW = "new"
     USED = "used"
     ANY = "any"
+
+
+@dataclass(frozen=True)
+class Edition:
+    """One published edition of a product, such as a game's English or German printing."""
+
+    name: str
+    title: str
+    product_code: str | None
+    year: str | None
+    languages: tuple[str, ...]
+    publishers: tuple[str, ...]
+
+
+class SaleSource(StrEnum):
+    BGG = "bgg"
+    EBAY = "ebay"
+
+
+@dataclass(frozen=True)
+class Sale:
+    """A completed sale seen somewhere, used as evidence of what an item really sells for."""
+
+    source: SaleSource
+    sold_on: date
+    price_cents: int
+    is_new: bool
+    condition: str
+    title: str = ""
+    shipping_cents: int | None = None
+    source_id: str | None = None
+
+
+@dataclass(frozen=True)
+class RecordedSale:
+    id: int
+    item_id: int
+    sale: Sale
 
 
 @dataclass(frozen=True)

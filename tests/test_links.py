@@ -5,8 +5,9 @@ from pathlib import Path
 import httpx2
 import pytest
 
+from buy_assist.bgg import BggApi
 from buy_assist.links import Edition, HttpLinkReader, LinkError, first_url
-from tests.fixtures import BGG_URL, recorded_bgg_api
+from tests.fixtures import BGG_URL, FakeClock, recorded_bgg_api
 
 DATA = Path(__file__).parent / "data"
 PUBLIC_IP = "93.184.215.14"
@@ -14,26 +15,14 @@ PUBLIC_IP = "93.184.215.14"
 type Handler = Callable[[httpx2.Request], httpx2.Response]
 
 
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-        self.sleeps: list[float] = []
-
-    def time(self) -> float:
-        return self.now
-
-    def sleep(self, seconds: float) -> None:
-        self.sleeps.append(seconds)
-        self.now += seconds
-
-
 def reader(handler: Handler, clock: FakeClock | None = None, ip: str = PUBLIC_IP) -> HttpLinkReader:
     clock = clock or FakeClock()
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     return HttpLinkReader(
-        httpx2.Client(transport=httpx2.MockTransport(handler)),
+        client,
+        BggApi(client, clock=clock.time, sleep=clock.sleep),
         resolve=lambda host: [ip],
         clock=clock.time,
-        sleep=clock.sleep,
     )
 
 
@@ -192,8 +181,10 @@ def test_redirect_to_private_host_is_refused() -> None:
             return httpx2.Response(302, headers={"location": "http://internal.example/"})
         return httpx2.Response(200, text="<p>secret</p>", headers={"content-type": "text/html"})
 
+    client = httpx2.Client(transport=httpx2.MockTransport(redirect))
     links = HttpLinkReader(
-        httpx2.Client(transport=httpx2.MockTransport(redirect)),
+        client,
+        BggApi(client),
         resolve=lambda host: [PUBLIC_IP] if host == "shop.example" else ["10.1.2.3"],
     )
     with pytest.raises(LinkError):
@@ -216,7 +207,8 @@ def test_non_http_url_is_link_error() -> None:
 
 @pytest.mark.live
 def test_live_bgg_reads_fixture_game() -> None:
-    facts = HttpLinkReader(httpx2.Client(timeout=20)).read(BGG_URL)
+    client = httpx2.Client(timeout=20)
+    facts = HttpLinkReader(client, BggApi(client)).read(BGG_URL)
     assert "Golden Book" in (facts.name or "")
     assert any(e.product_code == "681951" for e in facts.editions)
 
@@ -247,10 +239,8 @@ def test_page_is_fetched_from_the_address_that_was_checked() -> None:
 
 
 def test_host_with_any_private_address_is_refused() -> None:
-    links = HttpLinkReader(
-        httpx2.Client(transport=httpx2.MockTransport(shop_page)),
-        resolve=lambda host: [PUBLIC_IP, "127.0.0.1"],
-    )
+    client = httpx2.Client(transport=httpx2.MockTransport(shop_page))
+    links = HttpLinkReader(client, BggApi(client), resolve=lambda host: [PUBLIC_IP, "127.0.0.1"])
     with pytest.raises(LinkError):
         links.read("https://shop.example/skillet")
 
@@ -313,7 +303,8 @@ def test_page_image_that_is_not_a_web_link_is_dropped(image: str) -> None:
 
 @pytest.mark.live
 def test_live_generic_page_is_read_through_pinned_connection() -> None:
-    facts = HttpLinkReader(httpx2.Client(timeout=20)).read("https://example.com/")
+    client = httpx2.Client(timeout=20)
+    facts = HttpLinkReader(client, BggApi(client)).read("https://example.com/")
     assert facts.source == "example.com"
     assert facts.page_text is not None
     assert "Example Domain" in facts.page_text
