@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Who are you? · Buy Assistant{% endblock %}
+{% block main %}
+<h1>Who are you?</h1>
+<form method="post" action="/whoami" class="picker">
+  {% for user in users %}
+  <button name="user_id" value="{{ user.id }}">{{ user.name }}</button>
+  {% endfor %}
+</form>
+{% endblock %}

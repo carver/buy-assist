@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ form.name or "Item" }} · Buy Assistant{% endblock %}
+{% block main %}
+<h1>{{ "Edit item" if action != "/items" else "Check the details" }}</h1>
+{% if message %}<p class="notice">{{ message }}</p>{% endif %}
+{% if errors %}
+<ul class="errors">{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+{% endif %}
+<form method="post" action="{{ action }}" class="stack">
+  <label for="name">Name</label>
+  <input id="name" name="name" value="{{ form.name }}" required>
+
+  <label for="reference_url">Reference link</label>
+  <input id="reference_url" name="reference_url" type="url" value="{{ form.reference_url }}">
+
+  <div class="row">
+    <div>
+      <label for="condition">Condition</label>
+      <select id="condition" name="condition">
+        {% for condition in conditions %}
+        <option value="{{ condition.value }}"{% if form.condition == condition.value %} selected{% endif %}>{{ condition.value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="target_price">Target price, all-in ($)</label>
+      <input id="target_price" name="target_price" inputmode="decimal" value="{{ form.target_price }}">
+    </div>
+  </div>
+
+  <label for="variant">Variant <small>size, color, edition</small></label>
+  <input id="variant" name="variant" value="{{ form.variant }}">
+
+  <div class="row">
+    <div>
+      <label for="upc">UPC</label>
+      <input id="upc" name="upc" inputmode="numeric" value="{{ form.upc }}">
+    </div>
+    <div>
+      <label for="epid">eBay product ID</label>
+      <input id="epid" name="epid" value="{{ form.epid }}">
+    </div>
+    <div>
+      <label for="model_number">Model number</label>
+      <input id="model_number" name="model_number" value="{{ form.model_number }}">
+    </div>
+  </div>
+
+  <label for="zip">Ship to ZIP <small>blank means home</small></label>
+  <input id="zip" name="zip" inputmode="numeric" value="{{ form.zip }}"{% if home_zip %} placeholder="{{ home_zip }}"{% endif %}>
+
+  <fieldset>
+    <legend>Alert</legend>
+    {% for user in users %}
+    <label class="check"><input type="checkbox" name="watcher_ids" value="{{ user.id }}"{% if user.id in form.watcher_ids %} checked{% endif %}> {{ user.name }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <label for="notes">Notes</label>
+  <textarea id="notes" name="notes" rows="3">{{ form.notes }}</textarea>
+
+  <button>Save</button>
+</form>
+{% endblock %}

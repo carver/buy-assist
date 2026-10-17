@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+<title>{% block title %}Buy Assistant{% endblock %}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body hx-boost="true">
+<header>
+  <nav>
+    <a href="/" class="brand">Buy Assistant</a>
+    {% if me %}
+    <a href="/items/new">Add</a>
+    <a href="/settings">Settings</a>
+    <a href="/whoami" class="me">{{ me.name }}</a>
+    {% endif %}
+  </nav>
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+</body>
+</html>

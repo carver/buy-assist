@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Settings · Buy Assistant{% endblock %}
+{% block main %}
+<h1>Settings</h1>
+{% if errors %}
+<ul class="errors">{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+{% endif %}
+<form method="post" action="/settings" class="stack">
+  <label for="home_zip">Home ZIP</label>
+  <input id="home_zip" name="home_zip" inputmode="numeric" value="{{ home_zip }}" required>
+  <button>Save</button>
+</form>
+{% endblock %}

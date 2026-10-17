@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ "Closed items" if closed else "Wanted" }}</h1>
+{% if items %}
+<ul class="items">
+  {% for item in items %}
+  <li>
+    <a href="/items/{{ item.id }}">{{ item.fields.name }}</a>
+    {% if item.fields.target_price_cents is not none %}<span class="price">${{ item.fields.target_price_cents | dollars }}</span>{% endif %}
+    <span class="watchers">{% for user in users if user.id in item.fields.watcher_ids %}{{ user.name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% elif closed %}
+<p class="empty">Nothing closed yet.</p>
+{% else %}
+<p class="empty">Nothing on the list. <a href="/items/new">Add something.</a></p>
+{% endif %}
+<p class="aside">{% if closed %}<a href="/">Open items</a>{% else %}<a href="/?closed=1">Closed items</a>{% endif %}</p>
+{% endblock %}

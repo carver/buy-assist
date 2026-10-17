@@ -86,6 +86,12 @@ Moving to a real server should mean copying the code and the SQLite file, then a
 
 Needs an eBay developer account for API keys.
 
+Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 8000.
+
+## Development
+
+`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff, pyright and the tests.
+
 ## Build order
 
 eBay keys don't exist yet, so the parts that don't need them come first. The eBay source sits behind an interface and is tested against recorded responses until the keys arrive.

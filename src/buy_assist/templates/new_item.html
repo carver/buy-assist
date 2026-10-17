@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Add · Buy Assistant{% endblock %}
+{% block main %}
+<h1>What do you want?</h1>
+<form method="post" action="/items/draft" class="stack">
+  <label for="text">Describe it, paste a link, or both</label>
+  <textarea id="text" name="text" rows="4" required placeholder="EXIT advent calendar, golden book, new, under $35 https://boardgamegeek.com/…"></textarea>
+  <button>Next <span class="busy">· asking Claude…</span></button>
+</form>
+{% endblock %}

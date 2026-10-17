@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ item.fields.name }} · Buy Assistant{% endblock %}
+{% block main %}
+{% set f = item.fields %}
+<h1>{{ f.name }}</h1>
+{% if not item.is_open %}<p class="notice">Closed {{ item.closed_at.strftime("%b %-d, %Y") }}</p>{% endif %}
+<dl class="facts">
+  <dt>Target</dt><dd>{% if f.target_price_cents is not none %}${{ f.target_price_cents | dollars }} all-in{% else %}not set yet{% endif %}</dd>
+  <dt>Condition</dt><dd>{{ f.condition.value }}</dd>
+  {% if f.variant %}<dt>Variant</dt><dd>{{ f.variant }}</dd>{% endif %}
+  {% if f.upc %}<dt>UPC</dt><dd>{{ f.upc }}</dd>{% endif %}
+  {% if f.epid %}<dt>eBay product ID</dt><dd>{{ f.epid }}</dd>{% endif %}
+  {% if f.model_number %}<dt>Model number</dt><dd>{{ f.model_number }}</dd>{% endif %}
+  <dt>Ship to</dt><dd>{% if f.zip %}{{ f.zip }}{% else %}home{% if home_zip %} ({{ home_zip }}){% endif %}{% endif %}</dd>
+  <dt>Alerts</dt><dd>{% for user in users if user.id in f.watcher_ids %}{{ user.name }}{% if not loop.last %}, {% endif %}{% else %}nobody{% endfor %}</dd>
+  {% if f.reference_url %}<dt>Reference</dt><dd><a href="{{ f.reference_url }}" rel="noreferrer" target="_blank">{{ f.reference_url }}</a></dd>{% endif %}
+</dl>
+{% if f.notes %}<p class="notes">{{ f.notes }}</p>{% endif %}
+
+<section>
+  <h2>Listings</h2>
+  <p class="empty">No listings found yet.</p>
+</section>
+<section>
+  <h2>Price history</h2>
+  <p class="empty">No prices recorded yet.</p>
+</section>
+<section>
+  <h2>Sold prices</h2>
+  <p class="empty">No sold prices yet.</p>
+</section>
+
+<div class="actions">
+  <a href="/items/{{ item.id }}/edit" class="button">Edit</a>
+  {% if item.is_open %}
+  <form method="post" action="/items/{{ item.id }}/close" hx-confirm="Close this item? It stays in the closed list with its history.">
+    <button class="secondary">Close</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
