@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from buy_assist.models import Marketplace, Sale
-from buy_assist.prices import FullPrice, PriceStats, full_price, summarize_sales
+from buy_assist.prices import FullPrice, PriceStats, full_price, max_bid_cents, summarize_sales
 from buy_assist.usps import ShippingEstimate
 
 
@@ -81,3 +81,11 @@ def test_unknown_shipping_and_tax_rate_leave_gaps() -> None:
     assert price.tax_cents is None
     assert price.total_cents == 4000
     assert not price.complete
+
+
+def test_max_bid_keeps_the_full_price_within_the_limit() -> None:
+    bid = max_bid_cents(6000, 1000, Decimal("0.08625"))
+
+    assert bid == 4603  # $46.03 + $10.00 + $3.97 tax = $60.00
+    over = full_price(bid + 1, 1000, None, Decimal("0.08625"), collects_tax=True)
+    assert over.total_cents > 6000

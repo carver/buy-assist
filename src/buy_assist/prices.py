@@ -72,7 +72,8 @@ class FullPrice:
 
 
 def max_bid_cents(limit_cents: int, shipping_cents: int, tax_rate: Decimal) -> int:
-    """The highest bid whose full price, with tax on the bid, stays within the limit."""
+    """The highest bid whose full price, with tax on the bid, stays within the limit. Tax is
+    rounded per bid, so start a cent above the exact answer and step down to the first fit."""
     bid = int((limit_cents - shipping_cents) / (1 + tax_rate)) + 1
     while bid + shipping_cents + round(bid * tax_rate) > limit_cents:
         bid -= 1

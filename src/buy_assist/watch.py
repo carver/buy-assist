@@ -122,7 +122,8 @@ class _DigestLine:
     listing: RecordedListing
     price: FullPrice
     standing: str
-    """Where its price ranks among everything seen, or for an auction, how it's going."""
+    """Where its price ranks among everything seen, or for an auction, how it's going and,
+    when it ends soon, what to bid."""
 
 
 @dataclass(frozen=True)
@@ -321,18 +322,18 @@ class Watch:
         """The latest this person's next digest can go out: today's, until they've had it.
         Today's may be past, when it goes out this tick."""
         today = now.astimezone(PACIFIC).date()
+        return _digest_due_by(today + timedelta(days=1) if self._had_digest(user, today) else today)
+
+    def _had_digest(self, user: User, day: date) -> bool:
         last = self._store.last_run(_digest_job(user))
-        had_today = last is not None and last.astimezone(PACIFIC).date() >= today
-        return _digest_due_by(today + timedelta(days=1) if had_today else today)
+        return last is not None and last.astimezone(PACIFIC).date() >= day
 
     def _send_digests(self, mailer: Mailer, items: list[Item], now: datetime) -> None:
         """Today's digest for everyone who hasn't had one yet today. Each person's day is
         tracked on its own, so one failed send can't double anyone else's digest."""
         today = now.astimezone(PACIFIC).date()
         for recipient in self._everyone_with_email():
-            job = _digest_job(recipient.user)
-            last = self._store.last_run(job)
-            if last is not None and last.astimezone(PACIFIC).date() >= today:
+            if self._had_digest(recipient.user, today):
                 continue
             before = _digest_due_by(today + timedelta(days=1))
             entries = self._digest_entries(recipient.user, items, now, before)
@@ -342,7 +343,7 @@ class Watch:
             context: dict[str, object] = {"subject": subject, "entries": entries}
             if not self._send(mailer, recipient, subject, "digest", context):
                 continue
-            self._store.set_last_run(job, now)
+            self._store.set_last_run(_digest_job(recipient.user), now)
             for entry in entries:
                 for line in entry.lines + entry.ending:
                     self._store.log_notice(
