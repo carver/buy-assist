@@ -159,6 +159,7 @@ class User:
     id: int
     name: str
     email: str | None
+    is_admin: bool
 
 
 @dataclass(frozen=True)

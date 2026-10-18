@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -15,13 +16,23 @@ def store(tmp_path: Path) -> Store:
     return Store.open(tmp_path / "buy.db")
 
 
-def test_people_set_their_own_email(store: Store) -> None:
-    shira = store.users()[1]
-    store.set_email(shira.id, "shira@example.com")
+def test_first_person_is_the_admin(store: Store) -> None:
+    assert [u.is_admin for u in store.users()] == [True, False]
 
-    assert [u.email for u in store.users()] == [None, "shira@example.com"]
-    store.set_email(shira.id, None)
-    assert store.users()[1].email is None
+
+def test_people_are_saved_together_even_swapping_names(store: Store) -> None:
+    first, second = store.users()
+    store.save_people(
+        [
+            replace(first, name=second.name, is_admin=False),
+            replace(second, name=first.name, email="b@example.com", is_admin=True),
+        ]
+    )
+
+    assert [(u.name, u.email, u.is_admin) for u in store.users()] == [
+        (second.name, None, False),
+        (first.name, "b@example.com", True),
+    ]
 
 
 def test_home_zip_comes_with_its_confirmed_tax_rate(store: Store) -> None:

@@ -11,12 +11,17 @@
   <button>Save</button>
 </form>
 
-<h2>Email</h2>
-<p class="aside">Alerts and the 11:30am digest go to these addresses. Leave one blank for no email.</p>
+<h2>People</h2>
+<p class="aside">Alerts and the 11:30am digest go to these addresses. Leave one blank for no email. The admin also hears which reference-link sites deserve their own reader.</p>
 <form method="post" action="/settings/people" class="stack">
   {% for user in users %}
-  <label for="email_{{ user.id }}">{{ user.name }}</label>
-  <input id="email_{{ user.id }}" name="email_{{ user.id }}" type="email" value="{{ user.email or "" }}">
+  <fieldset class="person">
+    <label for="name_{{ user.id }}">Name</label>
+    <input id="name_{{ user.id }}" name="name_{{ user.id }}" value="{{ user.name }}" required>
+    <label for="email_{{ user.id }}">Email</label>
+    <input id="email_{{ user.id }}" name="email_{{ user.id }}" type="email" value="{{ user.email or "" }}">
+    <label class="check"><input type="checkbox" name="admin_{{ user.id }}"{% if user.is_admin %} checked{% endif %}> Admin</label>
+  </fieldset>
   {% endfor %}
   <button>Save</button>
 </form>

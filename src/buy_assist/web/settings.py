@@ -1,7 +1,8 @@
-"""Household settings: home ZIP, email addresses, the app's address, tax rates, and which
-reference-link sites have their own reader."""
+"""Household settings: home ZIP, people (names, email addresses, who's admin), the app's
+address, tax rates, and which reference-link sites have their own reader."""
 
 import re
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
@@ -56,16 +57,24 @@ def save_home_zip(
 
 
 @router.post("/settings/people")
-async def save_emails(request: Request, store: StoreDep, me: Me) -> Response:
+async def save_people(request: Request, store: StoreDep, me: Me) -> Response:
+    """Everyone's name, email and admin checkbox. A name or email left out of the form stays
+    as it was; an admin checkbox left out is unticked."""
     form = await request.form()
-    emails: dict[int, str | None] = {}
+    people: list[User] = []
     for user in store.users():
+        name = str(form.get(f"name_{user.id}", user.name)).strip()
         email = str(form.get(f"email_{user.id}", user.email or "")).strip()
+        if not name:
+            return _settings_page(request, me, ["Everyone needs a name."])
         if email and not _EMAIL.fullmatch(email):
             return _settings_page(request, me, [f"{email} doesn't look like an email address."])
-        emails[user.id] = email or None
-    for user_id, email in emails.items():
-        store.set_email(user_id, email)
+        people.append(
+            replace(user, name=name, email=email or None, is_admin=f"admin_{user.id}" in form)
+        )
+    if len({p.name.casefold() for p in people}) < len(people):
+        return _settings_page(request, me, ["Two people can't share a name."])
+    store.save_people(people)
     return _saved()
 
 

@@ -72,8 +72,13 @@ class Store:
 
     def users(self) -> list[User]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT id, name, email FROM users ORDER BY id").fetchall()
-        return [User(id=r["id"], name=r["name"], email=r["email"]) for r in rows]
+            rows = conn.execute(
+                "SELECT id, name, email, is_admin FROM users ORDER BY id"
+            ).fetchall()
+        return [
+            User(id=r["id"], name=r["name"], email=r["email"], is_admin=bool(r["is_admin"]))
+            for r in rows
+        ]
 
     def create_item(self, fields: ItemFields) -> Item:
         now = datetime.now(UTC).isoformat()
@@ -259,9 +264,18 @@ class Store:
         domains = (url_domain(row["reference_url"]) for row in rows)
         return dict(Counter(d for d in domains if d))
 
-    def set_email(self, user_id: int, email: str | None) -> None:
+    def save_people(self, users: Iterable[User]) -> None:
+        """Save each person's name, email and admin flag. Names are unique, so they're first
+        cleared to placeholders; that lets two people swap names."""
+        users = list(users)
         with self._connect() as conn:
-            conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+            for user in users:
+                conn.execute("UPDATE users SET name = ? WHERE id = ?", (f"\0{user.id}", user.id))
+            for user in users:
+                conn.execute(
+                    "UPDATE users SET name = ?, email = ?, is_admin = ? WHERE id = ?",
+                    (user.name, user.email, user.is_admin, user.id),
+                )
 
     def tax_rate(self, zip_code: str) -> Decimal | None:
         """Sales tax for delivery to a ZIP, as a fraction (0.08625 for 8.625%)."""

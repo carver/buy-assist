@@ -88,8 +88,9 @@ def store(tmp_path: Path) -> Store:
     store = Store.open(tmp_path / "buy.db")
     store.set_home_zip("94114")
     jason, shira = store.users()
-    store.set_email(jason.id, "jason@example.com")
-    store.set_email(shira.id, "shira@example.com")
+    store.save_people(
+        [replace(jason, email="jason@example.com"), replace(shira, email="shira@example.com")]
+    )
     return store
 
 
@@ -264,7 +265,7 @@ def test_failed_send_is_retried_next_tick(
 def test_person_without_email_gets_nothing(
     store: Store, source: FakeListings, watch: Watch, mailer: FakeMailer
 ) -> None:
-    store.set_email(store.users()[1].id, None)
+    store.save_people([replace(store.users()[1], email=None)])
     calendar(store)
     source.shown = [listing("1", 45)]
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from buy_assist.models import Listing, Marketplace
@@ -48,6 +49,42 @@ def test_people_set_their_email_addresses(shira: TestClient, store: Store) -> No
 
     assert [u.email for u in store.users()] == [None, "shira@example.com"]
     assert 'value="shira@example.com"' in shira.get("/settings").text
+
+
+def test_people_can_be_renamed_and_made_admin(shira: TestClient, store: Store) -> None:
+    first, second = store.users()
+    shira.post(
+        "/settings/people",
+        data={
+            f"name_{first.id}": "Pat",
+            f"email_{first.id}": "",
+            f"name_{second.id}": " Sam ",
+            f"email_{second.id}": "",
+            f"admin_{second.id}": "on",
+        },
+    )
+
+    assert [(u.name, u.is_admin) for u in store.users()] == [("Pat", False), ("Sam", True)]
+    page = shira.get("/settings").text
+    assert 'value="Sam"' in page
+    assert re.search(rf'name="admin_{second.id}"[^>]* checked', page)
+
+
+@pytest.mark.parametrize(
+    ("names", "message"),
+    [(("", "Sam"), "Everyone needs a name."), (("Sam", "sam"), "Two people can&#39;t share")],
+)
+def test_bad_names_are_refused(
+    shira: TestClient, store: Store, names: tuple[str, str], message: str
+) -> None:
+    people = store.users()
+    data = {f"name_{u.id}": name for u, name in zip(people, names, strict=True)}
+
+    response = shira.post("/settings/people", data=data)
+
+    assert response.status_code == 422
+    assert message in response.text
+    assert [u.name for u in store.users()] == [u.name for u in people]
 
 
 def test_bad_email_is_refused(shira: TestClient, store: Store) -> None:

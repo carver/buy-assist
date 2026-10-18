@@ -37,8 +37,6 @@ NEW_LOW_MIN_DATA_POINTS = 5
 FIRST_FOUND_WINDOW = timedelta(days=2)
 """How soon after an item's first listing turns up a "first listing found" alert still makes
 sense. Later, say for a watcher added weeks on, the digest covers it instead."""
-REMINDER_RECIPIENT = "Jason"
-"""Who hears that a reference-link site deserves its own reader."""
 
 _HEADINGS = {
     NoticeKind.AT_TARGET: "At your target",
@@ -248,9 +246,7 @@ class Watch:
                 continue
             entries = self._digest_entries(recipient.user, items)
             reminders = (
-                [d for d in wanted if d.domain not in reminded]
-                if recipient.user.name == REMINDER_RECIPIENT
-                else []
+                [d for d in wanted if d.domain not in reminded] if recipient.user.is_admin else []
             )
             if not entries and not reminders:
                 continue
