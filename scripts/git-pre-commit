@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Git's pre-commit hook. Link it in once per clone:
+#   ln -sf ../../scripts/git-pre-commit .git/hooks/pre-commit
+# pre-commit runs through uvx rather than the project's .venv: the host and the sandbox share
+# this checkout, and the .venv's interpreter only exists in the sandbox.
+# Agents' commits also run the slower agent-pre-commit (llm-toolbox agent-commit-gate).
+if [ -n "${AI_AGENT:-}" ] && [ -z "${AGENT_PRE_COMMIT:-}" ]; then AGENT_PRE_COMMIT=1 "$(dirname "$0")/agent-pre-commit" || exit; fi
+exec uvx pre-commit@4.7.0 run
