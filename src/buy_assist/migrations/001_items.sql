@@ -4,7 +4,7 @@ CREATE TABLE users (
     email TEXT
 );
 
-INSERT INTO users (name) VALUES ('Jason'), ('Shira');
+INSERT INTO users (name) VALUES ('Admin'), ('Member');
 
 CREATE TABLE settings (
     key TEXT PRIMARY KEY,

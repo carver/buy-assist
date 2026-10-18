@@ -288,7 +288,7 @@ From the Catalog OpenAPI spec and overview (<https://developer.ebay.com/api-docs
 
 - `GET /commerce/catalog/v1_beta/product_summary/search` takes `q`, `gtin` (comma-separated UPC/EAN/ISBN), `mpn`, `category_ids` and `aspect_filter`. "must include at least the q parameter, or the category_ids, gtin, or mpn parameter". `gtin` can't be combined with `q` or `aspect_filter`. `limit` max 200.
 - Each `productSummaries[]` entry has `epid`, `title`, `brand`, `gtin`, `upc`, `ean`, `isbn`, `mpn`, `image`, `aspects` and `productWebUrl`. `GET /product/{epid}` returns full details.
-- **Access restriction**: the only security flow in the spec is `authorizationCode` (a user token), with scope `commerce.catalog.readonly` or `sell.inventory`. An application token from client credentials won't work. Jason would have to sign in to eBay once through the consent flow, and the app would keep a refresh token (refresh grant limit 50,000/day, per the client credentials page's rate-limit table).
+- **Access restriction**: the only security flow in the spec is `authorizationCode` (a user token), with scope `commerce.catalog.readonly` or `sell.inventory`. An application token from client credentials won't work. The admin would have to sign in to eBay once through the consent flow, and the app would keep a refresh token (refresh grant limit 50,000/day, per the client credentials page's rate-limit table).
 - Limits: 10,000 calls/day per app, 100,000/day per user. Marketplaces: AU, CA (en), DE, ES, FR, GB, IT, US.
 - The API is built for sellers matching inventory, and it stayed v1_beta.
 

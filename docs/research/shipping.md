@@ -24,7 +24,7 @@ How a median of pasted shipping would behave:
 - **Seller-paid shipping is common even when it isn't free.** $5.85 for a US sale is below the cheapest commercial Ground Advantage price for a 3 lb parcel in any zone ($8.64 at zone 1, July 2026 prices). That seller either absorbed part of the postage or shipped it lighter than the box allows.
 - **Outliers.** International rows ($14 from Germany) and parts lots ($1.25) need filtering first, and the paste flow already unchecks most of them.
 
-What to do with pasted rows: use `price + shipping` for each sale as its all-in figure. Don't compute a median shipping and add it to some other price. Once Shira has pasted a few dozen US sales with calculated shipping, they are the best test set we'll have for the rate-table estimator in section 3.
+What to do with pasted rows: use `price + shipping` for each sale as its all-in figure. Don't compute a median shipping and add it to some other price. Once we have pasted a few dozen US sales with calculated shipping, they are the best test set we'll have for the rate-table estimator in section 3.
 
 ## 2. eBay Browse API
 
@@ -195,7 +195,7 @@ What to show on the item page:
 - In the sold-price summary: "Typical all-in ~$52 (shipping ~$10-16, estimated)", and a separate marker when the item's weight was assumed.
 - For eBay sales, the real shipping with no marker, since it's what the buyer paid.
 
-Open questions for Jason:
+Open questions for the admin:
 
 - Commercial or retail as the default? I picked commercial because sellers who list online mostly buy labels online. Retail is the safer "won't be surprised" number.
 - Is a 0.75 lb packing allowance right for the things the household buys? It's my guess and moves a few items across a pound tier.

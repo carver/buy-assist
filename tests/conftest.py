@@ -72,7 +72,7 @@ def client(
 
 
 @pytest.fixture
-def shira(client: TestClient, store: Store) -> TestClient:
-    shira = store.users()[1]
-    client.post("/whoami", data={"user_id": str(shira.id)})
+def member(client: TestClient, store: Store) -> TestClient:
+    member = store.users()[1]
+    client.post("/whoami", data={"user_id": str(member.id)})
     return client

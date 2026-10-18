@@ -87,9 +87,9 @@ class FakeMailer:
 def store(tmp_path: Path) -> Store:
     store = Store.open(tmp_path / "buy.db")
     store.set_home_zip("94114")
-    jason, shira = store.users()
+    admin, member = store.users()
     store.save_people(
-        [replace(jason, email="jason@example.com"), replace(shira, email="shira@example.com")]
+        [replace(admin, email="admin@example.com"), replace(member, email="member@example.com")]
     )
     return store
 
@@ -116,7 +116,7 @@ def watch(store: Store, source: FakeListings, sold: FakeSold, mailer: FakeMailer
     )
 
 
-def calendar(store: Store, *, target_dollars: int | None = None, watchers: str = "Shira") -> int:
+def calendar(store: Store, *, target_dollars: int | None = None, watchers: str = "Member") -> int:
     ids = {u.name: u.id for u in store.users()}
     fields = ItemFields(
         name="EXIT calendar",
@@ -137,12 +137,12 @@ def test_first_listing_found_is_sent_at_once_to_watchers_only(
     watch.tick(MORNING)
 
     assert len(store.listings(item_id)) == 2
-    [(subject, text)] = mailer.to("shira@example.com")
+    [(subject, text)] = mailer.to("member@example.com")
     assert subject == "First listing found: EXIT calendar"
     assert "$40.00" in text
     assert "$50.00 all-in" in text  # $40 + ~$10 estimated shipping, no tax on GeekMarket
     assert "The rest will come in your daily digest." in text
-    assert mailer.to("jason@example.com") == []
+    assert mailer.to("admin@example.com") == []
 
 
 def test_listings_are_fetched_once_a_day(store: Store, source: FakeListings, watch: Watch) -> None:
@@ -181,7 +181,7 @@ def test_listing_at_target_full_price_alerts_once(
     watch.tick(MORNING + timedelta(days=1))
     watch.tick(MORNING + timedelta(days=1, hours=1))
 
-    [(subject, text)] = mailer.to("shira@example.com")
+    [(subject, text)] = mailer.to("member@example.com")
     assert subject == "At your target: EXIT calendar"
     assert "$45.00 all-in" in text
 
@@ -194,12 +194,12 @@ def test_new_low_alerts_only_once_there_are_five_data_points(
     watch.tick(MORNING)
     source.shown = [*source.shown, listing("9", 49)]
     watch.tick(MORNING + timedelta(days=1))
-    assert [s for s, _ in mailer.to("shira@example.com")] == ["First listing found: EXIT calendar"]
+    assert [s for s, _ in mailer.to("member@example.com")] == ["First listing found: EXIT calendar"]
 
     source.shown = [*source.shown, listing("10", 45)]
     watch.tick(MORNING + timedelta(days=2))
 
-    subjects = [s for s, _ in mailer.to("shira@example.com")]
+    subjects = [s for s, _ in mailer.to("member@example.com")]
     assert subjects[-1] == "New low price: EXIT calendar"
 
 
@@ -216,7 +216,7 @@ def test_digest_goes_out_after_1130_pacific_once_a_day(
     watch.tick(MORNING + timedelta(hours=2, minutes=45))  # 11:45 Pacific
     watch.tick(MORNING + timedelta(hours=3, minutes=45))
 
-    [(subject, text)] = mailer.to("shira@example.com")
+    [(subject, text)] = mailer.to("member@example.com")
     assert subject == "Buy Assistant digest: 1 new listing"
     assert "EXIT calendar #1" in text  # #2 already came as the first-found alert
     assert "#2 of 2 seen, median $52.50" in text
@@ -232,7 +232,7 @@ def test_digest_with_nothing_new_is_skipped(
 
     watch.tick(MORNING + timedelta(days=1, hours=3))
 
-    assert mailer.to("shira@example.com") == []
+    assert mailer.to("member@example.com") == []
 
 
 def test_missed_digest_is_sent_late_the_same_day_only(
@@ -245,7 +245,9 @@ def test_missed_digest_is_sent_late_the_same_day_only(
 
     watch.tick(datetime(2026, 10, 18, 4, 30, tzinfo=UTC))  # 21:30 Pacific, same day
 
-    assert [s for s, _ in mailer.to("shira@example.com")] == ["Buy Assistant digest: 1 new listing"]
+    assert [s for s, _ in mailer.to("member@example.com")] == [
+        "Buy Assistant digest: 1 new listing"
+    ]
 
 
 def test_failed_send_is_retried_next_tick(
@@ -259,7 +261,7 @@ def test_failed_send_is_retried_next_tick(
     mailer.fail = False
     watch.tick(MORNING + timedelta(hours=1))
 
-    assert [s for s, _ in mailer.to("shira@example.com")] == ["First listing found: EXIT calendar"]
+    assert [s for s, _ in mailer.to("member@example.com")] == ["First listing found: EXIT calendar"]
 
 
 def test_person_without_email_gets_nothing(
@@ -283,7 +285,7 @@ def test_links_point_at_the_item_page_once_app_address_is_set(
 
     watch.tick(MORNING)
 
-    [(_, text)] = mailer.to("shira@example.com")
+    [(_, text)] = mailer.to("member@example.com")
     assert f"http://box.example.ts.net:6767/items/{item_id}" in text
 
 
@@ -310,26 +312,26 @@ def test_closed_items_are_not_watched(
     assert mailer.sent == []
 
 
-def test_jason_digest_carries_reader_reminder_once(
+def test_admin_digest_carries_reader_reminder_once(
     store: Store, watch: Watch, mailer: FakeMailer
 ) -> None:
-    jason = store.users()[0]
+    admin = store.users()[0]
     for n in range(3):
         store.create_item(
             ItemFields(
                 name=f"Pan {n}",
                 reference_url=f"https://shop.example/{n}",
-                watcher_ids=frozenset({jason.id}),
+                watcher_ids=frozenset({admin.id}),
             )
         )
 
     watch.tick(MORNING + timedelta(hours=3))
     watch.tick(MORNING + timedelta(days=1, hours=3))
 
-    [(subject, text)] = mailer.to("jason@example.com")
+    [(subject, text)] = mailer.to("admin@example.com")
     assert subject == "Buy Assistant digest: a reference-link reader to write"
     assert "shop.example" in text
-    assert mailer.to("shira@example.com") == []
+    assert mailer.to("member@example.com") == []
 
 
 def test_item_added_later_is_fetched_on_the_next_tick(
@@ -360,23 +362,23 @@ def test_listing_with_unknown_shipping_never_counts_as_at_target(
 
     watch.tick(MORNING)
 
-    assert [s for s, _ in mailer.to("shira@example.com")] == ["First listing found: EXIT calendar"]
+    assert [s for s, _ in mailer.to("member@example.com")] == ["First listing found: EXIT calendar"]
 
 
 def test_first_found_is_only_for_a_new_item(
     store: Store, source: FakeListings, watch: Watch, mailer: FakeMailer
 ) -> None:
-    item_id = calendar(store, watchers="Shira")
+    item_id = calendar(store, watchers="Member")
     source.shown = [listing("1", 45)]
     watch.tick(MORNING)
 
-    jason, shira = store.users()
+    admin, member = store.users()
     item = store.get_item(item_id)
     assert item is not None
-    store.update_item(item_id, replace(item.fields, watcher_ids=frozenset({jason.id, shira.id})))
+    store.update_item(item_id, replace(item.fields, watcher_ids=frozenset({admin.id, member.id})))
     watch.tick(MORNING + timedelta(days=3))
 
-    assert [s for s, _ in mailer.to("jason@example.com") if "First" in s] == []
+    assert [s for s, _ in mailer.to("admin@example.com") if "First" in s] == []
 
 
 def test_digest_leaves_out_listings_already_alerted(
@@ -389,7 +391,7 @@ def test_digest_leaves_out_listings_already_alerted(
 
     watch.tick(MORNING + timedelta(hours=3))
 
-    [(subject, text)] = mailer.to("shira@example.com")
+    [(subject, text)] = mailer.to("member@example.com")
     assert subject == "Buy Assistant digest: 1 new listing"
     assert "EXIT calendar #1" in text
     assert "EXIT calendar #2" not in text
@@ -398,19 +400,19 @@ def test_digest_leaves_out_listings_already_alerted(
 def test_failed_digest_for_one_person_never_doubles_anothers(
     store: Store, source: FakeListings, watch: Watch, mailer: FakeMailer
 ) -> None:
-    calendar(store, watchers="Jason,Shira")
+    calendar(store, watchers="Admin,Member")
     source.shown = [listing("1", 45), listing("2", 50)]
     watch.tick(MORNING)
 
     sent_before = len(mailer.sent)
     real_send = mailer.send
 
-    def fail_for_jason(to: str, subject: str, text: str, html: str | None) -> None:
-        if to == "jason@example.com":
+    def fail_for_admin(to: str, subject: str, text: str, html: str | None) -> None:
+        if to == "admin@example.com":
             raise MailerError("Couldn't send mail through smtp.example: TimeoutError")
         real_send(to, subject, text, html)
 
-    mailer.send = fail_for_jason  # type: ignore[method-assign]
+    mailer.send = fail_for_admin  # type: ignore[method-assign]
     watch.tick(MORNING + timedelta(hours=3))
     mailer.send = real_send  # type: ignore[method-assign]
     item_id = store.list_items(open_items=True)[0].id
@@ -420,8 +422,8 @@ def test_failed_digest_for_one_person_never_doubles_anothers(
 
     digests = [s for _, s, _, _ in mailer.sent[sent_before:] if "digest" in s]
     assert [to for to, s, _, _ in mailer.sent[sent_before:] if "digest" in s] == [
-        "shira@example.com",
-        "jason@example.com",
+        "member@example.com",
+        "admin@example.com",
     ]
     assert len(digests) == 2
 
@@ -445,7 +447,7 @@ def test_failed_sold_refresh_is_retried_next_tick(store: Store, watch: Watch) ->
 def test_reader_reminder_names_only_sites_not_reminded_before(
     store: Store, watch: Watch, mailer: FakeMailer
 ) -> None:
-    jason = store.users()[0]
+    admin = store.users()[0]
 
     def pans(site: str) -> None:
         for n in range(3):
@@ -453,7 +455,7 @@ def test_reader_reminder_names_only_sites_not_reminded_before(
                 ItemFields(
                     name=f"Pan {n}",
                     reference_url=f"https://{site}/{n}",
-                    watcher_ids=frozenset({jason.id}),
+                    watcher_ids=frozenset({admin.id}),
                 )
             )
 
@@ -462,6 +464,6 @@ def test_reader_reminder_names_only_sites_not_reminded_before(
     pans("rugs.example")
     watch.tick(MORNING + timedelta(days=1, hours=3))
 
-    [_, (_, text)] = mailer.to("jason@example.com")
+    [_, (_, text)] = mailer.to("admin@example.com")
     assert "rugs.example" in text
     assert "shop.example" not in text

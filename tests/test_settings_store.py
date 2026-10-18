@@ -66,7 +66,7 @@ def test_zone_charts_are_cached_by_prefix(store: Store) -> None:
 
 
 def test_notices_are_logged_once_per_person_and_kind(store: Store) -> None:
-    jason, shira = store.users()
+    admin, member = store.users()
     item = store.create_item(ItemFields(name="Calendar"))
     listing = Listing(
         marketplace=Marketplace.BGG,
@@ -79,7 +79,7 @@ def test_notices_are_logged_once_per_person_and_kind(store: Store) -> None:
     )
     [recorded] = store.record_listings(item.id, Marketplace.BGG, [listing], NOW).new
 
-    assert store.log_notice(recorded.id, shira.id, NoticeKind.DIGEST, NOW)
-    assert not store.log_notice(recorded.id, shira.id, NoticeKind.DIGEST, NOW)
-    assert store.log_notice(recorded.id, jason.id, NoticeKind.DIGEST, NOW)
-    assert store.noticed(recorded.id, shira.id) == {NoticeKind.DIGEST}
+    assert store.log_notice(recorded.id, member.id, NoticeKind.DIGEST, NOW)
+    assert not store.log_notice(recorded.id, member.id, NoticeKind.DIGEST, NOW)
+    assert store.log_notice(recorded.id, admin.id, NoticeKind.DIGEST, NOW)
+    assert store.noticed(recorded.id, member.id) == {NoticeKind.DIGEST}

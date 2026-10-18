@@ -26,8 +26,8 @@ def test_visitor_without_identity_is_asked_who_they_are(client: TestClient) -> N
 
 def test_picker_lists_household(client: TestClient) -> None:
     page = client.get("/whoami").text
-    assert "Jason" in page
-    assert "Shira" in page
+    assert "Admin" in page
+    assert "Member" in page
 
 
 def test_unknown_user_cookie_is_asked_again(client: TestClient) -> None:
@@ -40,9 +40,9 @@ def test_picking_unknown_user_is_rejected(client: TestClient) -> None:
 
 
 def test_draft_prefills_form_from_claude_with_home_zip_and_current_user(
-    shira: TestClient, parser: FakeParser
+    member: TestClient, parser: FakeParser
 ) -> None:
-    page = shira.post("/items/draft", data={"text": f"golden book calendar {BGG_URL}"}).text
+    page = member.post("/items/draft", data={"text": f"golden book calendar {BGG_URL}"}).text
 
     assert parser.requests == [(f"golden book calendar {BGG_URL}", BGG_FACTS)]
     assert EXIT_NAME in page
@@ -54,31 +54,31 @@ def test_draft_prefills_form_from_claude_with_home_zip_and_current_user(
 
 
 def test_draft_falls_back_to_blank_form_with_request_in_notes(
-    shira: TestClient, parser: FakeParser
+    member: TestClient, parser: FakeParser
 ) -> None:
     parser.fail = True
-    page = shira.post("/items/draft", data={"text": "wool cardigan size M"}).text
+    page = member.post("/items/draft", data={"text": "wool cardigan size M"}).text
 
     assert "fill in the rest by hand" in page
     assert "wool cardigan size M</textarea>" in page
 
 
-def test_saving_form_creates_item_and_shows_its_page(shira: TestClient, store: Store) -> None:
-    response = shira.post("/items", data=item_form(), follow_redirects=False)
+def test_saving_form_creates_item_and_shows_its_page(member: TestClient, store: Store) -> None:
+    response = member.post("/items", data=item_form(), follow_redirects=False)
 
     assert response.status_code == 303
     item_id = int(response.headers["location"].removeprefix("/items/"))
     assert store.get_item(item_id) is not None
-    page = shira.get(response.headers["location"]).text
+    page = member.get(response.headers["location"]).text
     assert EXIT_NAME in page
     assert "$35.00" in page
-    assert "Shira" in page
+    assert "Member" in page
     for section in ("Listings", "Price history", "Sold prices"):
         assert f"<h2>{section}</h2>" in page
 
 
-def test_saved_item_has_form_values(shira: TestClient, store: Store) -> None:
-    shira.post("/items", data=item_form(upc="4002051682026", watcher_ids=["1", "2"]))
+def test_saved_item_has_form_values(member: TestClient, store: Store) -> None:
+    member.post("/items", data=item_form(upc="4002051682026", watcher_ids=["1", "2"]))
 
     [item] = store.list_items(open_items=True)
     assert item.fields == ItemFields(
@@ -110,66 +110,68 @@ def test_saved_item_has_form_values(shira: TestClient, store: Store) -> None:
     ],
 )
 def test_invalid_form_is_shown_again_with_error(
-    shira: TestClient, store: Store, field: str, value: str | list[str], message: str
+    member: TestClient, store: Store, field: str, value: str | list[str], message: str
 ) -> None:
-    response = shira.post("/items", data=item_form(**{field: value}))
+    response = member.post("/items", data=item_form(**{field: value}))
 
     assert response.status_code == 422
     assert message in response.text
     assert store.list_items(open_items=True) == []
 
 
-def test_editing_item_changes_its_fields(shira: TestClient, store: Store) -> None:
-    location = shira.post("/items", data=item_form(), follow_redirects=False).headers["location"]
+def test_editing_item_changes_its_fields(member: TestClient, store: Store) -> None:
+    location = member.post("/items", data=item_form(), follow_redirects=False).headers["location"]
 
-    assert 'value="35.00"' in shira.get(f"{location}/edit").text
-    shira.post(location, data=item_form(target_price="30", notes="Sealed only"))
+    assert 'value="35.00"' in member.get(f"{location}/edit").text
+    member.post(location, data=item_form(target_price="30", notes="Sealed only"))
 
-    page = shira.get(location).text
+    page = member.get(location).text
     assert "$30.00" in page
     assert "Sealed only" in page
 
 
-def test_closed_item_moves_from_open_list_to_closed_list(shira: TestClient) -> None:
-    location = shira.post("/items", data=item_form(), follow_redirects=False).headers["location"]
-    assert EXIT_NAME in shira.get("/").text
+def test_closed_item_moves_from_open_list_to_closed_list(member: TestClient) -> None:
+    location = member.post("/items", data=item_form(), follow_redirects=False).headers["location"]
+    assert EXIT_NAME in member.get("/").text
 
-    shira.post(f"{location}/close")
+    member.post(f"{location}/close")
 
-    assert EXIT_NAME not in shira.get("/").text
-    assert EXIT_NAME in shira.get("/?closed=1").text
-    assert "Closed" in shira.get(location).text
-
-
-def test_unknown_item_is_404(shira: TestClient) -> None:
-    assert shira.get("/items/999").status_code == 404
-    assert shira.post("/items/999/close").status_code == 404
+    assert EXIT_NAME not in member.get("/").text
+    assert EXIT_NAME in member.get("/?closed=1").text
+    assert "Closed" in member.get(location).text
 
 
-def test_items_shipping_home_follow_home_zip_changes(shira: TestClient) -> None:
-    location = shira.post("/items", data=item_form(zip=""), follow_redirects=False).headers[
+def test_unknown_item_is_404(member: TestClient) -> None:
+    assert member.get("/items/999").status_code == 404
+    assert member.post("/items/999/close").status_code == 404
+
+
+def test_items_shipping_home_follow_home_zip_changes(member: TestClient) -> None:
+    location = member.post("/items", data=item_form(zip=""), follow_redirects=False).headers[
         "location"
     ]
 
-    shira.post("/settings", data={"home_zip": "10001"})
+    member.post("/settings", data={"home_zip": "10001"})
 
-    assert 'value="10001"' in shira.get("/settings").text
-    assert "home (10001)" in shira.get(location).text
-
-
-def test_settings_reject_bad_zip(shira: TestClient) -> None:
-    assert shira.post("/settings", data={"home_zip": "abc"}).status_code == 422
+    assert 'value="10001"' in member.get("/settings").text
+    assert "home (10001)" in member.get(location).text
 
 
-def test_item_text_is_escaped(shira: TestClient) -> None:
-    location = shira.post(
+def test_settings_reject_bad_zip(member: TestClient) -> None:
+    assert member.post("/settings", data={"home_zip": "abc"}).status_code == 422
+
+
+def test_item_text_is_escaped(member: TestClient) -> None:
+    location = member.post(
         "/items", data=item_form(name="<script>x</script>"), follow_redirects=False
     ).headers["location"]
-    assert "<script>x</script>" not in shira.get(location).text
+    assert "<script>x</script>" not in member.get(location).text
 
 
-def test_draft_reads_link_and_offers_its_editions(shira: TestClient, links: FakeLinkReader) -> None:
-    page = shira.post("/items/draft", data={"text": f"golden book {BGG_URL} please"}).text
+def test_draft_reads_link_and_offers_its_editions(
+    member: TestClient, links: FakeLinkReader
+) -> None:
+    page = member.post("/items/draft", data={"text": f"golden book {BGG_URL} please"}).text
 
     assert links.urls == [BGG_URL]
     assert '<select id="variant" name="variant"' in page
@@ -182,50 +184,50 @@ def test_draft_reads_link_and_offers_its_editions(shira: TestClient, links: Fake
 
 
 def test_draft_without_link_skips_reader(
-    shira: TestClient, links: FakeLinkReader, parser: FakeParser
+    member: TestClient, links: FakeLinkReader, parser: FakeParser
 ) -> None:
-    shira.post("/items/draft", data={"text": "wool cardigan size M"})
+    member.post("/items/draft", data={"text": "wool cardigan size M"})
 
     assert links.urls == []
     assert parser.requests == [("wool cardigan size M", None)]
 
 
 def test_unreadable_link_falls_back_to_text_with_notice(
-    shira: TestClient, links: FakeLinkReader, parser: FakeParser
+    member: TestClient, links: FakeLinkReader, parser: FakeParser
 ) -> None:
     links.error = "The site answered 403."
-    page = shira.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
+    page = member.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
 
     assert parser.requests == [(f"calendar {BGG_URL}", None)]
     assert "Couldn&#39;t read boardgamegeek.com: The site answered 403." in page
     assert EXIT_NAME in page
 
 
-def test_saved_image_shows_on_item_page_and_survives_edit(shira: TestClient) -> None:
-    location = shira.post(
+def test_saved_image_shows_on_item_page_and_survives_edit(member: TestClient) -> None:
+    location = member.post(
         "/items", data=item_form(image_url=IMAGE_URL), follow_redirects=False
     ).headers["location"]
 
-    assert f'<img src="{IMAGE_URL}"' in shira.get(location).text
-    edit_page = shira.get(f"{location}/edit").text
+    assert f'<img src="{IMAGE_URL}"' in member.get(location).text
+    edit_page = member.get(f"{location}/edit").text
     assert f'name="image_url" value="{IMAGE_URL}"' in edit_page
 
 
-def test_image_url_must_be_http(shira: TestClient) -> None:
-    response = shira.post("/items", data=item_form(image_url="javascript:alert(1)"))
+def test_image_url_must_be_http(member: TestClient) -> None:
+    response = member.post("/items", data=item_form(image_url="javascript:alert(1)"))
     assert response.status_code == 422
     assert "Image link must start with http" in response.text
 
 
 def test_settings_list_reference_domains_and_flag_busy_generic_ones(
-    shira: TestClient, store: Store
+    member: TestClient, store: Store
 ) -> None:
     for n in range(3):
         store.create_item(ItemFields(name=f"Pan {n}", reference_url=f"https://shop.example/{n}"))
     store.create_item(ItemFields(name="Calendar", reference_url=BGG_URL))
     store.create_item(ItemFields(name="Rug", reference_url="https://rugs.example/r"))
 
-    page = shira.get("/settings").text
+    page = member.get("/settings").text
 
     assert "shop.example" in page
     assert "boardgamegeek.com" in page
@@ -233,9 +235,9 @@ def test_settings_list_reference_domains_and_flag_busy_generic_ones(
     assert page.count("worth writing a reader") == 1
 
 
-def test_claude_failure_still_fills_form_from_link(shira: TestClient, parser: FakeParser) -> None:
+def test_claude_failure_still_fills_form_from_link(member: TestClient, parser: FakeParser) -> None:
     parser.fail = True
-    page = shira.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
+    page = member.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
 
     assert "fill in the rest by hand" in page
     assert f'value="{EXIT_NAME}"' in page
@@ -244,12 +246,12 @@ def test_claude_failure_still_fills_form_from_link(shira: TestClient, parser: Fa
     assert f'name="image_url" value="{IMAGE_URL}"' in page
 
 
-def test_edition_dropdown_survives_a_validation_error(shira: TestClient) -> None:
-    draft_page = shira.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
+def test_edition_dropdown_survives_a_validation_error(member: TestClient) -> None:
+    draft_page = member.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
     editions = re.search(r'name="editions" value="([^"]*)"', draft_page)
     assert editions is not None
 
-    response = shira.post(
+    response = member.post(
         "/items",
         data=item_form(target_price="cheap", editions=html.unescape(editions.group(1))),
     )
@@ -259,30 +261,30 @@ def test_edition_dropdown_survives_a_validation_error(shira: TestClient) -> None
     assert ">German edition" in response.text
 
 
-def test_tampered_editions_field_falls_back_to_text_variant(shira: TestClient) -> None:
-    response = shira.post("/items", data=item_form(target_price="cheap", editions="{nope"))
+def test_tampered_editions_field_falls_back_to_text_variant(member: TestClient) -> None:
+    response = member.post("/items", data=item_form(target_price="cheap", editions="{nope"))
     assert response.status_code == 422
     assert '<input id="variant" name="variant"' in response.text
 
 
 def test_dropdown_offers_blank_choice_when_no_edition_was_picked(
-    shira: TestClient, parser: FakeParser, links: FakeLinkReader
+    member: TestClient, parser: FakeParser, links: FakeLinkReader
 ) -> None:
     links.facts = LinkFacts(source="BoardGameGeek", name=EXIT_NAME, editions=(GERMAN,))
-    page = shira.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
+    page = member.post("/items/draft", data={"text": f"calendar {BGG_URL}"}).text
     assert '<option value="" selected>Choose an edition</option>' in page
 
 
 def test_link_without_host_names_the_link_in_notice(
-    shira: TestClient, links: FakeLinkReader
+    member: TestClient, links: FakeLinkReader
 ) -> None:
     links.error = "Only http and https links can be read."
-    page = shira.post("/items/draft", data={"text": "see http://:80/x"}).text
+    page = member.post("/items/draft", data={"text": "see http://:80/x"}).text
     assert "Couldn&#39;t read http://:80/x" in page
 
 
-def test_weight_and_box_size_are_saved_and_shown(shira: TestClient, store: Store) -> None:
-    location = shira.post(
+def test_weight_and_box_size_are_saved_and_shown(member: TestClient, store: Store) -> None:
+    location = member.post(
         "/items",
         data=item_form(weight_lb="1.875", box_in="17.76 x 12.91 \u00d7 2.13"),
         follow_redirects=False,
@@ -295,15 +297,15 @@ def test_weight_and_box_size_are_saved_and_shown(shira: TestClient, store: Store
         12.91,
         2.13,
     )
-    assert "17.8 \u00d7 12.9 \u00d7 2.1 in, 1.88 lb" in shira.get(location).text
-    edit_page = shira.get(f"{location}/edit").text
+    assert "17.8 \u00d7 12.9 \u00d7 2.1 in, 1.88 lb" in member.get(location).text
+    edit_page = member.get(f"{location}/edit").text
     assert 'name="weight_lb" inputmode="decimal" value="1.88"' in edit_page
     assert 'value="17.76 x 12.91 x 2.13"' in edit_page
 
 
-def test_item_page_says_why_shipping_is_unknown(shira: TestClient, store: Store) -> None:
+def test_item_page_says_why_shipping_is_unknown(member: TestClient, store: Store) -> None:
     store.set_home_zip("")
-    location = shira.post("/items", data=item_form(zip=""), follow_redirects=False).headers[
+    location = member.post("/items", data=item_form(zip=""), follow_redirects=False).headers[
         "location"
     ]
-    assert "to see shipping estimates" in shira.get(location).text
+    assert "to see shipping estimates" in member.get(location).text

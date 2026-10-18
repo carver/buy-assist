@@ -41,10 +41,10 @@ def test_message_arrives_with_text_and_html(inbox: tuple[Inbox, int]) -> None:
     handler, port = inbox
     mailer = SmtpMailer("127.0.0.1", port, "buyer@example.com", password=None, use_ssl=False)
 
-    mailer.send("shira@example.com", "New listing: Calendar", "Plain words", "<p>HTML words</p>")
+    mailer.send("member@example.com", "New listing: Calendar", "Plain words", "<p>HTML words</p>")
 
     [(envelope, message)] = handler.messages
-    assert envelope.rcpt_tos == ["shira@example.com"]
+    assert envelope.rcpt_tos == ["member@example.com"]
     assert message["From"] == "Buy Assistant <buyer@example.com>"
     assert message["Subject"] == "New listing: Calendar"
     plain = message.get_body(preferencelist=("plain",))
@@ -58,7 +58,7 @@ def test_message_arrives_with_text_and_html(inbox: tuple[Inbox, int]) -> None:
 def test_unreachable_server_is_mailer_error() -> None:
     mailer = SmtpMailer("127.0.0.1", 1, "buyer@example.com", password=None, use_ssl=False)
     with pytest.raises(MailerError):
-        mailer.send("shira@example.com", "Hi", "text", None)
+        mailer.send("member@example.com", "Hi", "text", None)
 
 
 def test_missing_credentials_name_their_source_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -74,10 +74,10 @@ def test_line_breaks_in_subject_are_flattened(inbox: tuple[Inbox, int]) -> None:
     handler, port = inbox
     mailer = SmtpMailer("127.0.0.1", port, "buyer@example.com", password=None, use_ssl=False)
 
-    mailer.send("shira@example.com", "At your target: EXIT\nBcc: x@evil.example", "t", None)
+    mailer.send("member@example.com", "At your target: EXIT\nBcc: x@evil.example", "t", None)
 
     [(envelope, message)] = handler.messages
-    assert envelope.rcpt_tos == ["shira@example.com"]
+    assert envelope.rcpt_tos == ["member@example.com"]
     assert message["Subject"] == "At your target: EXIT Bcc: x@evil.example"
 
 

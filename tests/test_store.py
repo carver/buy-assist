@@ -14,7 +14,7 @@ from tests.fixtures import BGG_URL, EXIT_NAME
 
 def test_new_store_has_household_users(tmp_path: Path) -> None:
     store = Store.open(tmp_path / "buy.db")
-    assert [u.name for u in store.users()] == ["Jason", "Shira"]
+    assert [u.name for u in store.users()] == ["Admin", "Member"]
 
 
 def exit_calendar(watcher_ids: frozenset[int]) -> ItemFields:
@@ -35,8 +35,8 @@ def exit_calendar(watcher_ids: frozenset[int]) -> ItemFields:
 
 def test_created_item_reads_back_open_with_its_fields(tmp_path: Path) -> None:
     store = Store.open(tmp_path / "buy.db")
-    shira = store.users()[1]
-    fields = exit_calendar(frozenset({shira.id}))
+    member = store.users()[1]
+    fields = exit_calendar(frozenset({member.id}))
 
     item = store.create_item(fields)
 
@@ -51,10 +51,10 @@ def test_missing_item_is_none(tmp_path: Path) -> None:
 
 def test_update_replaces_fields_and_watchers(tmp_path: Path) -> None:
     store = Store.open(tmp_path / "buy.db")
-    jason, shira = store.users()
-    item = store.create_item(exit_calendar(frozenset({shira.id})))
+    admin, member = store.users()
+    item = store.create_item(exit_calendar(frozenset({member.id})))
     changed = replace(
-        item.fields, target_price_cents=None, notes="", watcher_ids=frozenset({jason.id})
+        item.fields, target_price_cents=None, notes="", watcher_ids=frozenset({admin.id})
     )
 
     updated = store.update_item(item.id, changed)

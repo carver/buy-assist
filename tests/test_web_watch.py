@@ -40,20 +40,20 @@ def bgg_listing(external_id: str, dollars: int) -> Listing:
     )
 
 
-def test_people_set_their_email_addresses(shira: TestClient, store: Store) -> None:
-    jason, shira_user = store.users()
-    shira.post(
+def test_people_set_their_email_addresses(member: TestClient, store: Store) -> None:
+    admin, member_user = store.users()
+    member.post(
         "/settings/people",
-        data={f"email_{jason.id}": "", f"email_{shira_user.id}": "shira@example.com"},
+        data={f"email_{admin.id}": "", f"email_{member_user.id}": "member@example.com"},
     )
 
-    assert [u.email for u in store.users()] == [None, "shira@example.com"]
-    assert 'value="shira@example.com"' in shira.get("/settings").text
+    assert [u.email for u in store.users()] == [None, "member@example.com"]
+    assert 'value="member@example.com"' in member.get("/settings").text
 
 
-def test_people_can_be_renamed_and_made_admin(shira: TestClient, store: Store) -> None:
+def test_people_can_be_renamed_and_made_admin(member: TestClient, store: Store) -> None:
     first, second = store.users()
-    shira.post(
+    member.post(
         "/settings/people",
         data={
             f"name_{first.id}": "Pat",
@@ -65,7 +65,7 @@ def test_people_can_be_renamed_and_made_admin(shira: TestClient, store: Store) -
     )
 
     assert [(u.name, u.is_admin) for u in store.users()] == [("Pat", False), ("Sam", True)]
-    page = shira.get("/settings").text
+    page = member.get("/settings").text
     assert 'value="Sam"' in page
     assert re.search(rf'name="admin_{second.id}"[^>]* checked', page)
 
@@ -75,59 +75,59 @@ def test_people_can_be_renamed_and_made_admin(shira: TestClient, store: Store) -
     [(("", "Sam"), "Everyone needs a name."), (("Sam", "sam"), "Two people can&#39;t share")],
 )
 def test_bad_names_are_refused(
-    shira: TestClient, store: Store, names: tuple[str, str], message: str
+    member: TestClient, store: Store, names: tuple[str, str], message: str
 ) -> None:
     people = store.users()
     data = {f"name_{u.id}": name for u, name in zip(people, names, strict=True)}
 
-    response = shira.post("/settings/people", data=data)
+    response = member.post("/settings/people", data=data)
 
     assert response.status_code == 422
     assert message in response.text
     assert [u.name for u in store.users()] == [u.name for u in people]
 
 
-def test_bad_email_is_refused(shira: TestClient, store: Store) -> None:
-    shira_user = store.users()[1]
-    response = shira.post("/settings/people", data={f"email_{shira_user.id}": "not-an-email"})
+def test_bad_email_is_refused(member: TestClient, store: Store) -> None:
+    member_user = store.users()[1]
+    response = member.post("/settings/people", data={f"email_{member_user.id}": "not-an-email"})
     assert response.status_code == 422
     assert "doesn&#39;t look like an email address" in response.text
 
 
-def test_app_address_is_saved(shira: TestClient, store: Store) -> None:
-    shira.post("/settings/app", data={"app_address": "http://box.example.ts.net:6767"})
+def test_app_address_is_saved(member: TestClient, store: Store) -> None:
+    member.post("/settings/app", data={"app_address": "http://box.example.ts.net:6767"})
     assert store.app_address() == "http://box.example.ts.net:6767"
-    assert shira.post("/settings/app", data={"app_address": "ftp://x"}).status_code == 422
+    assert member.post("/settings/app", data={"app_address": "ftp://x"}).status_code == 422
 
 
-def test_tax_rates_are_listed_and_edited(shira: TestClient, store: Store) -> None:
-    assert "8.625%" in shira.get("/settings").text
+def test_tax_rates_are_listed_and_edited(member: TestClient, store: Store) -> None:
+    assert "8.625%" in member.get("/settings").text
 
-    shira.post("/settings/tax", data={"zip": "10001", "rate_percent": "8.875"})
+    member.post("/settings/tax", data={"zip": "10001", "rate_percent": "8.875"})
     assert store.tax_rate("10001") == Decimal("0.08875")
 
-    shira.post("/settings/tax", data={"zip": "10001", "rate_percent": ""})
+    member.post("/settings/tax", data={"zip": "10001", "rate_percent": ""})
     assert store.tax_rate("10001") is None
 
 
-def test_bad_tax_rate_is_refused(shira: TestClient) -> None:
+def test_bad_tax_rate_is_refused(member: TestClient) -> None:
     assert (
-        shira.post("/settings/tax", data={"zip": "10001", "rate_percent": "lots"}).status_code
+        member.post("/settings/tax", data={"zip": "10001", "rate_percent": "lots"}).status_code
         == 422
     )
-    assert shira.post("/settings/tax", data={"zip": "1", "rate_percent": "8"}).status_code == 422
+    assert member.post("/settings/tax", data={"zip": "1", "rate_percent": "8"}).status_code == 422
     assert (
-        shira.post("/settings/tax", data={"zip": "10001", "rate_percent": "40"}).status_code == 422
+        member.post("/settings/tax", data={"zip": "10001", "rate_percent": "40"}).status_code == 422
     )
 
 
-def test_item_page_lists_listings_with_full_prices(shira: TestClient, store: Store) -> None:
-    item_id = add_item(shira)
+def test_item_page_lists_listings_with_full_prices(member: TestClient, store: Store) -> None:
+    item_id = add_item(member)
     store.record_listings(
         item_id, Marketplace.BGG, [bgg_listing("1", 45), bgg_listing("2", 40)], SEEN
     )
 
-    page = shira.get(f"/items/{item_id}").text
+    page = member.get(f"/items/{item_id}").text
 
     section = re.search(r"<h2>Listings</h2>(.*?)</section>", page, re.S)
     assert section is not None
@@ -137,12 +137,12 @@ def test_item_page_lists_listings_with_full_prices(shira: TestClient, store: Sto
     assert "Louisiana" in section.group(1)
 
 
-def test_gone_listings_move_to_price_history(shira: TestClient, store: Store) -> None:
-    item_id = add_item(shira)
+def test_gone_listings_move_to_price_history(member: TestClient, store: Store) -> None:
+    item_id = add_item(member)
     store.record_listings(item_id, Marketplace.BGG, [bgg_listing("1", 45)], SEEN)
     store.record_listings(item_id, Marketplace.BGG, [], datetime(2026, 10, 20, tzinfo=UTC))
 
-    page = shira.get(f"/items/{item_id}").text
+    page = member.get(f"/items/{item_id}").text
 
     history = re.search(r"<h2>Price history</h2>(.*?)</section>", page, re.S)
     assert history is not None
@@ -150,8 +150,8 @@ def test_gone_listings_move_to_price_history(shira: TestClient, store: Store) ->
     assert "gone Oct 20" in history.group(1)
 
 
-def test_sold_summary_shows_typical_all_in_price(shira: TestClient) -> None:
-    page = shira.get(f"/items/{add_item(shira)}").text
+def test_sold_summary_shows_typical_all_in_price(member: TestClient) -> None:
+    page = member.get(f"/items/{add_item(member)}").text
 
     new_row = re.search(r'<tr class="summary-new">(.*?)</tr>', page, re.S)
     assert new_row is not None
@@ -179,8 +179,8 @@ def test_app_runs_the_watch_while_it_is_up(tmp_path: Path) -> None:
     assert store.last_run("sold") is not None
 
 
-def test_estimate_with_unknown_origin_shows_its_range(shira: TestClient, store: Store) -> None:
-    item_id = add_item(shira)
+def test_estimate_with_unknown_origin_shows_its_range(member: TestClient, store: Store) -> None:
+    item_id = add_item(member)
     unknown_origin = Listing(
         marketplace=Marketplace.BGG,
         external_id="9",
@@ -192,4 +192,4 @@ def test_estimate_with_unknown_origin_shows_its_range(shira: TestClient, store: 
     )
     store.record_listings(item_id, Marketplace.BGG, [unknown_origin], SEEN)
 
-    assert "est. $9.00&ndash;$16.00" in shira.get(f"/items/{item_id}").text
+    assert "est. $9.00&ndash;$16.00" in member.get(f"/items/{item_id}").text
