@@ -43,6 +43,7 @@ def _watching(
     watch = Watch(
         store,
         listing_sources=services.listing_sources,
+        judge=services.judge,
         sold_prices=services.sold_prices,
         shipping=services.shipping,
         mailer=services.mailer,

@@ -1,9 +1,11 @@
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from buy_assist.claude import ParseError
 from buy_assist.listings import ListingError
 from buy_assist.mailer import MailerError
 from buy_assist.models import Condition, ItemFields, Listing, Marketplace, Sale
@@ -34,6 +36,7 @@ def listing(external_id: str, dollars: int) -> Listing:
 class FakeListings:
     marketplace = Marketplace.BGG
     label = "BoardGameGeek"
+    needs_judging = False
 
     def __init__(self) -> None:
         self.shown: list[Listing] = []
@@ -48,6 +51,26 @@ class FakeListings:
         if self.error:
             raise ListingError(self.error)
         return self.shown
+
+
+class FakeEbayListings(FakeListings):
+    marketplace = Marketplace.EBAY
+    label = "eBay"
+    needs_judging = True
+
+
+class FakeJudge:
+    def __init__(self) -> None:
+        self.judged: list[list[str]] = []
+        self.rejecting: dict[str, str] = {}
+        self.fail = False
+
+    def rejections(self, item: ItemFields, listings: Sequence[Listing]) -> dict[str, str]:
+        if self.fail:
+            raise ParseError("claude-json exited 1")
+        ids = [listing.external_id for listing in listings]
+        self.judged.append(ids)
+        return {i: reason for i, reason in self.rejecting.items() if i in ids}
 
 
 class FakeSold:
@@ -110,9 +133,21 @@ def mailer() -> FakeMailer:
 
 
 @pytest.fixture
-def watch(store: Store, source: FakeListings, sold: FakeSold, mailer: FakeMailer) -> Watch:
+def judge() -> FakeJudge:
+    return FakeJudge()
+
+
+@pytest.fixture
+def watch(
+    store: Store, source: FakeListings, sold: FakeSold, mailer: FakeMailer, judge: FakeJudge
+) -> Watch:
     return Watch(
-        store, listing_sources=[source], sold_prices=sold, shipping=FakeQuoter(), mailer=mailer
+        store,
+        listing_sources=[source],
+        judge=judge,
+        sold_prices=sold,
+        shipping=FakeQuoter(),
+        mailer=mailer,
     )
 
 
@@ -378,7 +413,12 @@ def test_listing_with_unknown_shipping_never_counts_as_at_target(
     store: Store, source: FakeListings, sold: FakeSold, mailer: FakeMailer
 ) -> None:
     watch = Watch(
-        store, listing_sources=[source], sold_prices=sold, shipping=NoQuote(), mailer=mailer
+        store,
+        listing_sources=[source],
+        judge=FakeJudge(),
+        sold_prices=sold,
+        shipping=NoQuote(),
+        mailer=mailer,
     )
     calendar(store, target_dollars=45)
     source.shown = [listing("1", 40)]
@@ -458,10 +498,95 @@ def test_failed_sold_refresh_is_retried_next_tick(store: Store, watch: Watch) ->
             raise SoldPriceError("BoardGameGeek answered 503.")
 
     sold = FailingSold()
-    failing = Watch(store, listing_sources=[], sold_prices=sold, shipping=FakeQuoter(), mailer=None)
+    failing = Watch(
+        store,
+        listing_sources=[],
+        judge=FakeJudge(),
+        sold_prices=sold,
+        shipping=FakeQuoter(),
+        mailer=None,
+    )
     calendar(store)
 
     failing.tick(MORNING)
     failing.tick(MORNING + timedelta(hours=1))
 
     assert sold.calls == 2
+
+
+def ebay_listing(external_id: str, dollars: int) -> Listing:
+    return replace(
+        listing(external_id, dollars),
+        marketplace=Marketplace.EBAY,
+        url=f"https://www.ebay.com/itm/{external_id}",
+    )
+
+
+def test_ebay_listings_are_judged_once_when_first_seen(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = Watch(
+        store,
+        listing_sources=[ebay],
+        judge=judge,
+        sold_prices=FakeSold(),
+        shipping=FakeQuoter(),
+        mailer=mailer,
+    )
+    item_id = calendar(store)
+    ebay.shown = [ebay_listing("1", 40), ebay_listing("2", 5)]
+    judge.rejecting = {"2": "Box only"}
+    watch.tick(MORNING)
+    ebay.shown = [ebay_listing("1", 40), ebay_listing("2", 5), ebay_listing("3", 42)]
+    watch.tick(MORNING + timedelta(days=1))
+
+    assert judge.judged == [["1", "2"], ["3"]]
+    rejections = {r.listing.external_id: r.rejection for r in store.listings(item_id)}
+    assert rejections == {"1": None, "2": "Box only", "3": None}
+
+
+def test_failed_judging_leaves_the_fetch_for_next_tick(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = Watch(
+        store,
+        listing_sources=[ebay],
+        judge=judge,
+        sold_prices=FakeSold(),
+        shipping=FakeQuoter(),
+        mailer=mailer,
+    )
+    item_id = calendar(store)
+    ebay.shown = [ebay_listing("1", 40)]
+    judge.fail = True
+    watch.tick(MORNING)
+    assert store.listings(item_id) == []
+
+    judge.fail = False
+    watch.tick(MORNING + timedelta(hours=1))
+    assert len(store.listings(item_id)) == 1
+
+
+def test_failed_judging_retries_ebay_without_refetching_geekmarket(
+    store: Store, source: FakeListings, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = Watch(
+        store,
+        listing_sources=[source, ebay],
+        judge=judge,
+        sold_prices=FakeSold(),
+        shipping=FakeQuoter(),
+        mailer=mailer,
+    )
+    calendar(store)
+    ebay.shown = [ebay_listing("1", 40)]
+    judge.fail = True
+    watch.tick(MORNING)
+
+    judge.fail = False
+    watch.tick(MORNING + timedelta(hours=1))
+
+    assert (source.calls, ebay.calls) == (1, 2)

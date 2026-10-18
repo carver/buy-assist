@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from buy_assist.ebay import sold_search_url
 from buy_assist.forms import describe_box, format_dollars, format_pounds
+from buy_assist.judge import ListingJudge
 from buy_assist.links import LinkReader
 from buy_assist.listings import ListingSource
 from buy_assist.mailer import Mailer
@@ -39,6 +40,7 @@ class Services:
     sold_prices: SoldPriceSource
     sales_parser: SalesParser
     listing_sources: Sequence[ListingSource]
+    judge: ListingJudge
     shipping: ShippingQuoter
     mailer: Mailer | None
 

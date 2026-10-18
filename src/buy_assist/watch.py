@@ -17,11 +17,13 @@ from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from buy_assist.claude import ParseError
 from buy_assist.domains import ReferenceDomain, reference_domains
 from buy_assist.forms import format_dollars
+from buy_assist.judge import ListingJudge
 from buy_assist.listings import ListingError, ListingSource
 from buy_assist.mailer import Mailer, MailerError
-from buy_assist.models import Item, NoticeKind, RecordedListing, User
+from buy_assist.models import Item, Listing, NoticeKind, RecordedListing, User
 from buy_assist.prices import FullPrice
 from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceError, SoldPriceSource
@@ -118,12 +120,14 @@ class Watch:
         store: Store,
         *,
         listing_sources: Sequence[ListingSource],
+        judge: ListingJudge,
         sold_prices: SoldPriceSource,
         shipping: ShippingQuoter,
         mailer: Mailer | None,
     ) -> None:
         self._store = store
         self._sources = listing_sources
+        self._judge = judge
         self._sold = sold_prices
         self._pricer = Pricer(store, shipping)
         self._mailer = mailer
@@ -131,8 +135,9 @@ class Watch:
     def tick(self, now: datetime) -> None:
         items = self._store.list_items(open_items=True)
         for item in items:
-            if self._due(_fetch_job(item), now, FETCH_EVERY):
-                fetch_listings(self._store, self._sources, item, now)
+            due = [s for s in self._sources if self._due(_fetch_job(item, s), now, FETCH_EVERY)]
+            if due:
+                fetch_listings(self._store, due, self._judge, item, now)
         if self._due("sold", now, SOLD_REFRESH_EVERY) and self._refresh_sold(items):
             self._store.set_last_run("sold", now)
         if self._mailer is None:
@@ -311,28 +316,46 @@ class Watch:
 
 
 def fetch_listings(
-    store: Store, sources: Sequence[ListingSource], item: Item, now: datetime
+    store: Store, sources: Sequence[ListingSource], judge: ListingJudge, item: Item, now: datetime
 ) -> None:
-    """Look for an item in every source that covers it, and record what's there. A look
-    where every source failed isn't recorded, so the next tick tries again."""
-    tried = failed = 0
+    """Look for an item in every source that covers it, and record what's there, with
+    Claude's verdict on listings not seen before where the source needs one. Each source
+    remembers its own last good look: one whose look or judging failed records nothing and
+    is tried again next tick, without repeating the others."""
     for source in sources:
         if not source.covers(item.fields):
             continue
-        tried += 1
         try:
             found = source.listings_for(item.fields, store.ship_to(item.fields))
         except ListingError as e:
-            failed += 1
             _log.warning("%s listings for item %d: %s", source.label, item.id, e)
             continue
-        store.record_listings(item.id, source.marketplace, found, now)
-    if tried == 0 or failed < tried:
-        store.set_last_run(_fetch_job(item), now)
+        try:
+            rejections = _judged(store, source, judge, item, found)
+        except ParseError as e:
+            _log.warning("Judging %s listings for item %d: %s", source.label, item.id, e)
+            continue
+        store.record_listings(item.id, source.marketplace, found, now, rejections=rejections)
+        store.set_last_run(_fetch_job(item, source), now)
 
 
-def _fetch_job(item: Item) -> str:
-    return f"fetch:{item.id}"
+def _judged(
+    store: Store,
+    source: ListingSource,
+    judge: ListingJudge,
+    item: Item,
+    found: Sequence[Listing],
+) -> dict[str, str]:
+    """Claude's rejections among the listings this look found for the first time."""
+    if not source.needs_judging:
+        return {}
+    known = store.known_listing_ids(item.id, source.marketplace)
+    unseen = [listing for listing in found if listing.external_id not in known]
+    return judge.rejections(item.fields, unseen) if unseen else {}
+
+
+def _fetch_job(item: Item, source: ListingSource) -> str:
+    return f"fetch:{item.id}:{source.marketplace}"
 
 
 def _rank(total: int, totals: list[int]) -> str:

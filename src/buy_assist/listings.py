@@ -17,6 +17,8 @@ class ListingError(Exception):
 class ListingSource(Protocol):
     marketplace: Marketplace
     label: str
+    needs_judging: bool
+    """Whether its results need Claude's check that they're the item (see judge.py)."""
 
     def covers(self, item: ItemFields) -> bool:
         """Whether this source can look for the item."""
@@ -34,6 +36,7 @@ class GeekMarketListings:
 
     marketplace = Marketplace.BGG
     label = Marketplace.BGG.label
+    needs_judging = False
 
     def __init__(self, bgg: BggApi) -> None:
         self._bgg = bgg
@@ -58,6 +61,7 @@ class EbayListings:
 
     marketplace = Marketplace.EBAY
     label = Marketplace.EBAY.label
+    needs_judging = True
 
     def __init__(self, ebay: EbayApi) -> None:
         self._ebay = ebay

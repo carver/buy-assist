@@ -7,6 +7,7 @@ import httpx2
 import uvicorn
 
 from buy_assist.bgg import BggApi
+from buy_assist.judge import ClaudeListingJudge
 from buy_assist.links import HttpLinkReader
 from buy_assist.listings import GeekMarketListings
 from buy_assist.mailer import Mailer, MailerError, SmtpMailer
@@ -45,6 +46,7 @@ def main() -> None:
         sold_prices=BggSoldPrices(bgg),
         sales_parser=ClaudeSalesParser(),
         listing_sources=[GeekMarketListings(bgg)],
+        judge=ClaudeListingJudge(),
         shipping=UspsQuoter(Store.open(args.db), client),
         mailer=_mailer(),
     )

@@ -163,7 +163,14 @@ def create_item(
     item = store.create_item(fields)
     if services.sold_prices.covers(fields):
         background.add_task(record_sales_quietly, store, services.sold_prices, item)
-    background.add_task(fetch_listings, store, services.listing_sources, item, datetime.now(UTC))
+    background.add_task(
+        fetch_listings,
+        store,
+        services.listing_sources,
+        services.judge,
+        item,
+        datetime.now(UTC),
+    )
     return RedirectResponse(f"/items/{item.id}", status_code=303)
 
 

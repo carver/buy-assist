@@ -16,6 +16,7 @@ from tests.web_fakes import (
     FakeSalesParser,
     FakeSoldPrices,
     FixedQuoter,
+    PassingJudge,
     item_form,
 )
 
@@ -167,6 +168,7 @@ def test_app_runs_the_watch_while_it_is_up(tmp_path: Path) -> None:
         sales_parser=FakeSalesParser(),
         listing_sources=[],
         shipping=FixedQuoter(),
+        judge=PassingJudge(),
         mailer=None,
     )
     store = Store.open(db)

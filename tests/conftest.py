@@ -13,6 +13,7 @@ from tests.web_fakes import (
     FakeSalesParser,
     FakeSoldPrices,
     FixedQuoter,
+    PassingJudge,
 )
 
 
@@ -65,6 +66,7 @@ def client(
         sales_parser=sales_parser,
         listing_sources=[listing_source],
         shipping=FixedQuoter(),
+        judge=PassingJudge(),
         mailer=None,
     )
     with TestClient(create_app(tmp_path / "buy.db", services)) as client:

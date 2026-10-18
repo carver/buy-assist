@@ -1,5 +1,6 @@
 """Fakes for the web app's collaborators, and a filled-in item form."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from buy_assist.claude import ParseError
@@ -173,6 +174,7 @@ class FixedQuoter:
 class FakeListingSource:
     marketplace = Marketplace.BGG
     label = "BoardGameGeek"
+    needs_judging = False
 
     def __init__(self) -> None:
         self.calls = 0
@@ -193,3 +195,10 @@ class FakeListingSource:
                 condition="New",
             )
         ]
+
+
+class PassingJudge:
+    """Judges every listing to be the item."""
+
+    def rejections(self, item: ItemFields, listings: Sequence[Listing]) -> dict[str, str]:
+        return {}
