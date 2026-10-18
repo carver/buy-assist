@@ -3,6 +3,13 @@
 {% block title %}{{ item.fields.name }} · Buy Assistant{% endblock %}
 {% block main %}
 {% set f = item.fields %}
+{% macro bought_form(listing_id=none, paid="") %}
+<form method="post" action="/items/{{ item.id }}/bought" class="inline">
+  {% if listing_id is not none %}<input type="hidden" name="listing_id" value="{{ listing_id }}">{% endif %}
+  <label>Paid, all-in $<input name="price" inputmode="decimal" value="{{ paid }}" required></label>
+  <button>Bought</button>
+</form>
+{% endmacro %}
 {% macro feedback(recorded, price) %}
 {% if item.is_open %}
 <div class="feedback">
@@ -15,11 +22,7 @@
   </details>
   <details>
     <summary>Bought</summary>
-    <form method="post" action="/items/{{ item.id }}/bought" class="inline">
-      <input type="hidden" name="listing_id" value="{{ recorded.id }}">
-      <label>Paid, all-in $<input name="price" inputmode="decimal" value="{{ price.total_cents | dollars if price.complete else '' }}" required></label>
-      <button>Bought</button>
-    </form>
+    {{ bought_form(recorded.id, price.total_cents | dollars if price.complete else "") }}
   </details>
 </div>
 {% endif %}
@@ -170,10 +173,7 @@
   {% if item.is_open %}
   <details class="elsewhere">
     <summary class="button secondary">Bought elsewhere</summary>
-    <form method="post" action="/items/{{ item.id }}/bought" class="inline">
-      <label>Paid, all-in $<input name="price" inputmode="decimal" required></label>
-      <button>Bought</button>
-    </form>
+    {{ bought_form() }}
   </details>
   <form method="post" action="/items/{{ item.id }}/close" hx-confirm="Close this item? It stays in the closed list with its history.">
     <button class="secondary">Close</button>

@@ -302,7 +302,7 @@ class Store:
                 (reason, by, listing_id),
             )
 
-    def keep_listing(self, listing_id: int) -> None:
+    def put_back_listing(self, listing_id: int) -> None:
         """Put a filtered listing back, for good: Claude won't filter it again."""
         with self._connect() as conn:
             conn.execute(
@@ -589,7 +589,15 @@ def _read_item(conn: sqlite3.Connection, item_id: int) -> Item:
         fields=fields,
         created_at=datetime.fromisoformat(row["created_at"]),
         closed_at=datetime.fromisoformat(closed_at) if closed_at else None,
-        purchase=Purchase(row["bought_price_cents"], row["bought_by"], row["bought_listing_id"])
-        if row["bought_price_cents"] is not None
-        else None,
+        purchase=_read_purchase(row),
+    )
+
+
+def _read_purchase(row: sqlite3.Row) -> Purchase | None:
+    if row["bought_price_cents"] is None:
+        return None
+    return Purchase(
+        price_cents=row["bought_price_cents"],
+        buyer_id=row["bought_by"],
+        listing_id=row["bought_listing_id"],
     )

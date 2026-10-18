@@ -18,7 +18,7 @@ router = APIRouter()
 _log = logging.getLogger(__name__)
 
 
-def _items_listing(store: Store, item: Item, listing_id: int) -> RecordedListing:
+def _listing_of(store: Store, item: Item, listing_id: int) -> RecordedListing:
     listing = store.get_listing(item.id, listing_id)
     if listing is None:
         raise HTTPException(404, "No such listing for this item")
@@ -48,7 +48,7 @@ def not_this(
 ) -> Response:
     """Filter a listing out. A reason goes in the item's notes, and Claude checks the
     item's other listings again with them."""
-    listing = _items_listing(store, item, listing_id)
+    listing = _listing_of(store, item, listing_id)
     if refused := _refused_when_closed(request, me, item):
         return refused
     reason = " ".join(reason.split())[:SALE_TITLE_LIMIT]
@@ -95,10 +95,10 @@ def _check_again(store: Store, services: Services, item: Item) -> list[str]:
 def put_back(
     request: Request, store: StoreDep, me: Me, item: ExistingItem, listing_id: int
 ) -> Response:
-    listing = _items_listing(store, item, listing_id)
+    listing = _listing_of(store, item, listing_id)
     if refused := _refused_when_closed(request, me, item):
         return refused
-    store.keep_listing(listing.id)
+    store.put_back_listing(listing.id)
     return _back_to(item)
 
 
@@ -110,11 +110,11 @@ def bought(
     me: Me,
     item: ExistingItem,
     price: Annotated[str, Form()] = "",
-    listing_id: Annotated[str, Form()] = "",
+    listing_id: Annotated[int | None, Form()] = None,
 ) -> Response:
     """Record what the item cost all-in, from one of its listings or elsewhere, close it,
     and tell its other watchers so nobody buys a second."""
-    listing = _items_listing(store, item, int(listing_id)) if listing_id.isdecimal() else None
+    listing = None if listing_id is None else _listing_of(store, item, listing_id)
     if refused := _refused_when_closed(request, me, item):
         return refused
     price_cents = parse_dollars(price)
