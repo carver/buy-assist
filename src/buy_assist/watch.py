@@ -56,6 +56,10 @@ class _Priced:
     listing: RecordedListing
     price: FullPrice
 
+    @property
+    def is_auction(self) -> bool:
+        return self.listing.listing.is_auction
+
 
 @dataclass(frozen=True)
 class _Reason:
@@ -96,7 +100,8 @@ def _alert_lines(reasons: list[_Reason]) -> list[_AlertLine]:
 class _DigestLine:
     listing: RecordedListing
     price: FullPrice
-    rank: str
+    standing: str
+    """Where its price ranks among everything seen, or for an auction, how it's going."""
 
 
 @dataclass(frozen=True)
@@ -211,7 +216,7 @@ class Watch:
         shipping or tax can't be at target or a new low: it's only a lower bound. Nor can an
         auction's bid, which will rise; auctions wait for the digest."""
         noticed = {p.listing.id: self._store.noticed(p.listing.id, user.id) for p in priced}
-        buy_now = [p for p in priced if not p.listing.listing.is_auction]
+        buy_now = [p for p in priced if not p.is_auction]
         active = [p for p in buy_now if p.listing.ended_at is None]
         reasons: list[_Reason] = []
         first_seen = min(p.listing.first_seen for p in priced)
@@ -270,7 +275,7 @@ class Watch:
             if user.id not in item.fields.watcher_ids:
                 continue
             priced = self._priced(item)
-            totals = [p.price.total_cents for p in priced if not p.listing.listing.is_auction]
+            totals = [p.price.total_cents for p in priced if not p.is_auction]
             lines = [
                 _DigestLine(
                     p.listing,

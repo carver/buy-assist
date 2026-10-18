@@ -9,7 +9,7 @@ import base64
 import os
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote, urlencode, urlsplit
@@ -27,12 +27,15 @@ from buy_assist.models import (
     optional_text,
 )
 
-_CONDITION_FILTER = {Condition.NEW: "1000", Condition.USED: "3000"}
+_CONDITION_IDS = {Condition.NEW: "1000", Condition.USED: "3000"}
+"""eBay's condition ids, for the sold-search link and for telling new listings apart."""
+_CONDITIONS = {Condition.NEW: "NEW", Condition.USED: "USED"}
+"""Browse search's condition filter values."""
+_MAX_QUERY_CHARS = 100
 _TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 _SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 _SCOPE = "https://api.ebay.com/oauth/api_scope"
 _TOKEN_MARGIN_SECONDS = 300
-_NEW_CONDITION_ID = "1000"
 
 
 def sold_search_url(item: ItemFields) -> str:
@@ -42,7 +45,7 @@ def sold_search_url(item: ItemFields) -> str:
         "LH_Sold": "1",
         "LH_Complete": "1",
     }
-    if condition := _CONDITION_FILTER.get(item.condition):
+    if condition := _CONDITION_IDS.get(item.condition):
         params["LH_ItemCondition"] = condition
     return "https://www.ebay.com/sch/i.html?" + urlencode(params)
 
@@ -75,9 +78,10 @@ class EbayApi:
             return None
         return cls(client, client_id, client_secret)
 
-    def us_listings(self, params: Mapping[str, str], ship_to: str | None) -> list[Listing]:
-        """Search results, as listings in dollars with working links, cheapest first. With a
-        ship-to ZIP, eBay quotes shipping to it."""
+    def us_listings(self, item: ItemFields, ship_to: str | None) -> list[Listing]:
+        """The item's search results, as listings in dollars with working links, cheapest
+        first. With a ship-to ZIP, eBay quotes shipping to it."""
+        params = _search_params(item, ship_to)
         headers = {"x-ebay-c-marketplace-id": "EBAY_US"}
         if ship_to:
             location = quote(f"country=US,zip={ship_to}", safe="")
@@ -95,22 +99,23 @@ class EbayApi:
         listings = [listing for s in answer.itemSummaries if (listing := s.listing())]
         return sorted(listings, key=lambda listing: listing.price_cents)
 
-    def _search(self, params: Mapping[str, str], headers: dict[str, str]) -> httpx2.Response:
+    def _search(self, params: dict[str, str], headers: dict[str, str]) -> httpx2.Response:
         headers = {**headers, "authorization": f"Bearer {self._access_token()}"}
-        return self._request("GET", _SEARCH_URL, params=dict(params), headers=headers)
+        return self._call(lambda: self._client.get(_SEARCH_URL, params=params, headers=headers))
 
     def _access_token(self) -> str:
         with self._lock:
             if self._token and self._clock() < self._token[1]:
                 return self._token[0]
-            response = self._request(
-                "POST",
-                _TOKEN_URL,
-                headers={
-                    "authorization": f"Basic {self._basic}",
-                    "content-type": "application/x-www-form-urlencoded",
-                },
-                content=urlencode({"grant_type": "client_credentials", "scope": _SCOPE}),
+            response = self._call(
+                lambda: self._client.post(
+                    _TOKEN_URL,
+                    headers={
+                        "authorization": f"Basic {self._basic}",
+                        "content-type": "application/x-www-form-urlencoded",
+                    },
+                    content=urlencode({"grant_type": "client_credentials", "scope": _SCOPE}),
+                )
             )
             if response.status_code != 200:
                 raise EbayError(f"eBay refused the app's keys ({response.status_code}).")
@@ -122,11 +127,35 @@ class EbayApi:
             self._token = (token.access_token, expires)
             return token.access_token
 
-    def _request(self, method: str, url: str, **kwargs: object) -> httpx2.Response:
+    def _call(self, request: Callable[[], httpx2.Response]) -> httpx2.Response:
         try:
-            return self._client.request(method, url, **kwargs)  # pyright: ignore[reportArgumentType]
+            return request()
         except httpx2.HTTPError as e:
             raise EbayError(f"eBay didn't answer ({type(e).__name__}).") from e
+
+
+def _search_params(item: ItemFields, ship_to: str | None) -> dict[str, str]:
+    """Buy It Now and auctions, located in the US and delivering to us, in the item's
+    condition. A UPC or EPID finds the product itself; otherwise the search words do."""
+    filters = [
+        "buyingOptions:{FIXED_PRICE|BEST_OFFER|AUCTION}",
+        "itemLocationCountry:US",
+        "deliveryCountry:US",
+    ]
+    if ship_to:
+        filters.append(f"deliveryPostalCode:{ship_to}")
+    if condition := _CONDITIONS.get(item.condition):
+        filters.append(f"conditions:{{{condition}}}")
+    # Cheapest first: when more than one page matches, the ones left out (and so taken to
+    # have ended) are the dearest.
+    params = {"filter": ",".join(filters), "limit": "200", "sort": "price"}
+    if item.upc:
+        params["gtin"] = item.upc
+    elif item.epid:
+        params["epid"] = item.epid
+    else:
+        params["q"] = (item.search_query or item.name)[:_MAX_QUERY_CHARS]
+    return params
 
 
 class _TokenAnswer(BaseModel):
@@ -192,7 +221,7 @@ class _Summary(BaseModel):
             title=title[:SALE_TITLE_LIMIT],
             url=self.itemWebUrl,
             price_cents=price,
-            is_new=self.conditionId == _NEW_CONDITION_ID,
+            is_new=self.conditionId == _CONDITION_IDS[Condition.NEW],
             condition=(optional_text(self.condition) or "Unknown")[:SALE_CONDITION_LIMIT],
             shipping_cents=self._shipping_cents(),
             origin_zip3=self._origin_zip3(),
@@ -218,5 +247,4 @@ class _Summary(BaseModel):
 
 
 class _SearchAnswer(BaseModel):
-    total: int = 0
     itemSummaries: list[_Summary] = []

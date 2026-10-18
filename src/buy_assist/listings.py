@@ -5,7 +5,7 @@ from typing import Protocol
 
 from buy_assist.bgg import BggApi, BggError, game_id
 from buy_assist.ebay import EbayApi, EbayError
-from buy_assist.models import Condition, ItemFields, Listing, Marketplace
+from buy_assist.models import ItemFields, Listing, Marketplace
 
 _YEAR_OR_COPY_SUFFIX = re.compile(r"\s*(\(\d{4}\)|#\d+)\s*$")
 
@@ -56,8 +56,7 @@ class GeekMarketListings:
 
 
 class EbayListings:
-    """eBay listings, Buy It Now and auctions, located in the US and delivering to us. A UPC
-    or EPID finds the product itself; otherwise the search words do."""
+    """eBay listings, Buy It Now and auctions (see EbayApi.us_listings)."""
 
     marketplace = Marketplace.EBAY
     label = Marketplace.EBAY.label
@@ -71,35 +70,9 @@ class EbayListings:
 
     def listings_for(self, item: ItemFields, ship_to: str | None) -> list[Listing]:
         try:
-            return self._ebay.us_listings(_ebay_search(item, ship_to), ship_to)
+            return self._ebay.us_listings(item, ship_to)
         except EbayError as e:
             raise ListingError(str(e)) from e
-
-
-_EBAY_CONDITIONS = {Condition.NEW: "NEW", Condition.USED: "USED"}
-_EBAY_MAX_QUERY_CHARS = 100
-
-
-def _ebay_search(item: ItemFields, ship_to: str | None) -> dict[str, str]:
-    filters = [
-        "buyingOptions:{FIXED_PRICE|BEST_OFFER|AUCTION}",
-        "itemLocationCountry:US",
-        "deliveryCountry:US",
-    ]
-    if ship_to:
-        filters.append(f"deliveryPostalCode:{ship_to}")
-    if condition := _EBAY_CONDITIONS.get(item.condition):
-        filters.append(f"conditions:{{{condition}}}")
-    # Cheapest first: when more than one page matches, the ones left out (and so taken to
-    # have ended) are the dearest.
-    params = {"filter": ",".join(filters), "limit": "200", "sort": "price"}
-    if item.upc:
-        params["gtin"] = item.upc
-    elif item.epid:
-        params["epid"] = item.epid
-    else:
-        params["q"] = (item.search_query or item.name)[:_EBAY_MAX_QUERY_CHARS]
-    return params
 
 
 def _bgg_id(item: ItemFields) -> str | None:

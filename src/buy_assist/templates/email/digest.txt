@@ -4,6 +4,6 @@
 {% for line in entry.lines %}
 - {{ line.listing.listing.title }}
   {{ price_line(line.price) }}
-  {{ line.listing.listing.condition }} · {{ line.rank }} · {{ line.listing.listing.url }}
+  {{ line.listing.listing.condition }} · {{ line.standing }} · {{ line.listing.listing.url }}
 {% endfor %}{% endfor %}
 {% include "email/_footer.txt" %}

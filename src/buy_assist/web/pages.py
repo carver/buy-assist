@@ -104,7 +104,9 @@ def item_page(
     pricer = Pricer(store, _services(request).shipping)
     sales = [(r, pricer.sale(item.fields, r.sale)) for r in store.sales(item.id)]
     recorded = store.listings(item.id, include_ended=True)
-    listings = [(r, pricer.listing(item.fields, r.listing)) for r in recorded if not r.rejection]
+    listings = [
+        (r, pricer.listing(item.fields, r.listing)) for r in recorded if r.rejection is None
+    ]
     return render(
         request,
         "item.html",
@@ -120,7 +122,7 @@ def item_page(
             key=lambda rp: rp[0].ended_at or rp[0].last_seen,
             reverse=True,
         ),
-        filtered_out=[r for r in recorded if r.rejection],
+        filtered_out=[r for r in recorded if r.rejection is not None],
         summary=summarize_sales(
             (r.sale for r, _ in sales), lambda sale: pricer.sale(item.fields, sale).total_cents
         ),
