@@ -1,0 +1,91 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=EXIT+advent+calendar+golden+book&limit=200",
+  "total": 6,
+  "limit": 200,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|205512345678|0",
+      "legacyItemId": "205512345678",
+      "title": "EXIT The Game Advent Calendar The Hunt for the Golden Book KOSMOS New Sealed",
+      "price": {"value": "32.99", "currency": "USD"},
+      "condition": "New",
+      "conditionId": "1000",
+      "buyingOptions": ["FIXED_PRICE", "BEST_OFFER"],
+      "shippingOptions": [
+        {"shippingCostType": "FIXED", "shippingCost": {"value": "6.45", "currency": "USD"}}
+      ],
+      "seller": {"username": "example_seller_1", "feedbackScore": 512, "feedbackPercentage": "99.8"},
+      "itemWebUrl": "https://www.ebay.com/itm/205512345678",
+      "itemLocation": {"postalCode": "940**", "country": "US"}
+    },
+    {
+      "itemId": "v1|125598765432|0",
+      "legacyItemId": "125598765432",
+      "title": "Exit Advent Calendar Golden Book - played once, all pieces",
+      "price": {"value": "18.00", "currency": "USD"},
+      "condition": "Used",
+      "conditionId": "3000",
+      "buyingOptions": ["FIXED_PRICE"],
+      "shippingOptions": [{"shippingCostType": "CALCULATED"}],
+      "itemWebUrl": "https://www.ebay.com/itm/125598765432",
+      "itemLocation": {"postalCode": "606**", "country": "US"}
+    },
+    {
+      "itemId": "v1|335511112222|0",
+      "legacyItemId": "335511112222",
+      "title": "KOSMOS EXIT Advent Calendar Hunt for the Golden Book",
+      "currentBidPrice": {"value": "12.50", "currency": "USD"},
+      "bidCount": 3,
+      "condition": "New",
+      "conditionId": "1000",
+      "buyingOptions": ["AUCTION"],
+      "itemEndDate": "2026-10-20T03:15:00.000Z",
+      "shippingOptions": [
+        {"shippingCostType": "FIXED", "shippingCost": {"value": "0.00", "currency": "USD"}}
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/335511112222",
+      "itemLocation": {"postalCode": "981**", "country": "US"}
+    },
+    {
+      "itemId": "v1|335533334444|0",
+      "legacyItemId": "335533334444",
+      "title": "EXIT Advent Calendar Golden Book auction or buy now",
+      "price": {"value": "30.00", "currency": "USD"},
+      "currentBidPrice": {"value": "15.00", "currency": "USD"},
+      "bidCount": 1,
+      "condition": "New",
+      "conditionId": "1000",
+      "buyingOptions": ["AUCTION", "FIXED_PRICE"],
+      "itemEndDate": "2026-10-22T18:00:00.000Z",
+      "shippingOptions": [
+        {"shippingCostType": "FIXED", "shippingCost": {"value": "8.00", "currency": "USD"}},
+        {"shippingCostType": "FIXED", "shippingCost": {"value": "5.25", "currency": "USD"}}
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/335533334444",
+      "itemLocation": {"country": "US"}
+    },
+    {
+      "itemId": "v1|405500001111|0",
+      "legacyItemId": "405500001111",
+      "title": "EXIT Adventskalender Golden Book (priced in CAD)",
+      "price": {"value": "40.00", "currency": "CAD"},
+      "condition": "New",
+      "conditionId": "1000",
+      "buyingOptions": ["FIXED_PRICE"],
+      "itemWebUrl": "https://www.ebay.com/itm/405500001111",
+      "itemLocation": {"postalCode": "100**", "country": "US"}
+    },
+    {
+      "itemId": "v1|405500002222|0",
+      "legacyItemId": "405500002222",
+      "title": "EXIT calendar with a link that isn't eBay's",
+      "price": {"value": "20.00", "currency": "USD"},
+      "condition": "New",
+      "conditionId": "1000",
+      "buyingOptions": ["FIXED_PRICE"],
+      "itemWebUrl": "javascript:alert(1)",
+      "itemLocation": {"postalCode": "100**", "country": "US"}
+    }
+  ]
+}

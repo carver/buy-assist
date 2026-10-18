@@ -180,7 +180,7 @@ class FakeListingSource:
     def covers(self, item: ItemFields) -> bool:
         return item.reference_url == BGG_URL
 
-    def listings_for(self, item: ItemFields) -> list[Listing]:
+    def listings_for(self, item: ItemFields, ship_to: str | None) -> list[Listing]:
         self.calls += 1
         return [
             Listing(

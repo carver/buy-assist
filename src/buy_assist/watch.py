@@ -321,7 +321,7 @@ def fetch_listings(
             continue
         tried += 1
         try:
-            found = source.listings_for(item.fields)
+            found = source.listings_for(item.fields, store.ship_to(item.fields))
         except ListingError as e:
             failed += 1
             _log.warning("%s listings for item %d: %s", source.label, item.id, e)
