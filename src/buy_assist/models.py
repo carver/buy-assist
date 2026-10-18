@@ -116,7 +116,11 @@ class RecordedListing:
     last_seen: datetime
     ended_at: datetime | None
     rejection: str | None = None
-    """Why Claude judged this listing not to be the item, if it did."""
+    """Why this listing isn't the item, if Claude or a person said so."""
+    rejected_by: int | None = None
+    """The person who said it isn't the item; None when Claude did."""
+    kept: bool = False
+    """A person put it back after it was filtered out, so Claude leaves it alone."""
 
 
 @dataclass(frozen=True)
@@ -200,11 +204,21 @@ class ItemFields:
 
 
 @dataclass(frozen=True)
+class Purchase:
+    price_cents: int
+    """All-in: what the buyer says it cost, shipping and tax included."""
+    buyer_id: int
+    listing_id: int | None
+    """The listing it was bought from, or None for somewhere the app didn't see."""
+
+
+@dataclass(frozen=True)
 class Item:
     id: int
     fields: ItemFields
     created_at: datetime
     closed_at: datetime | None
+    purchase: Purchase | None = None
 
     @property
     def is_open(self) -> bool:

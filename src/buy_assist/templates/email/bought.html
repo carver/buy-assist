@@ -1,0 +1,6 @@
+<div style="font-family: system-ui, sans-serif; max-width: 36rem">
+<h2 style="font-size: 1.15rem">{% if item_url %}<a href="{{ item_url }}">{{ item.name }}</a>{% else %}{{ item.name }}{% endif %}</h2>
+<p>{{ buyer }} bought it for ${{ price }} all-in, so its alerts have stopped.</p>
+{% if listing %}<p><a href="{{ listing.url }}">{{ listing.title }}</a><br>
+<span style="color: #6b665e">{{ listing.marketplace.label }}</span></p>{% endif %}
+{% include "email/_footer.html" %}</div>

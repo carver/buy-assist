@@ -7,7 +7,8 @@
   <li>
     {% if item.fields.image_url %}<img src="{{ item.fields.image_url }}" alt="" class="thumb">{% else %}<span class="thumb"></span>{% endif %}
     <a href="/items/{{ item.id }}">{{ item.fields.name }}</a>
-    {% if item.fields.target_price_cents is not none %}<span class="price">${{ item.fields.target_price_cents | dollars }}</span>{% endif %}
+    {% if item.purchase %}<span class="price">${{ item.purchase.price_cents | dollars }} paid</span>
+    {% elif item.fields.target_price_cents is not none %}<span class="price">${{ item.fields.target_price_cents | dollars }}</span>{% endif %}
     <span class="watchers">{% for user in users if user.id in item.fields.watcher_ids %}{{ user.name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
   </li>
   {% endfor %}

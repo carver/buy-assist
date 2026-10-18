@@ -98,7 +98,11 @@ def render(
 
 
 def item_page(
-    request: Request, me: User, item: Item, messages: list[str] | None = None
+    request: Request,
+    me: User,
+    item: Item,
+    messages: list[str] | None = None,
+    status_code: int = 200,
 ) -> HTMLResponse:
     store = store_of(request)
     pricer = Pricer(store, _services(request).shipping)
@@ -111,8 +115,10 @@ def item_page(
         request,
         "item.html",
         me,
+        status_code,
         item=item,
         home_zip=store.home_zip(),
+        names={u.id: u.name for u in store.users()},
         sales=sales,
         listings=sorted(
             ((r, p) for r, p in listings if r.ended_at is None), key=lambda rp: rp[1].total_cents
@@ -123,6 +129,9 @@ def item_page(
             reverse=True,
         ),
         filtered_out=[r for r in recorded if r.rejection is not None],
+        bought_from=next(
+            (r for r in recorded if item.purchase and r.id == item.purchase.listing_id), None
+        ),
         summary=summarize_sales(
             (r.sale for r, _ in sales), lambda sale: pricer.sale(item.fields, sale).total_cents
         ),

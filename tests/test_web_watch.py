@@ -225,7 +225,7 @@ def test_filtered_out_listings_are_listed_apart_with_claudes_reason(
     history = re.search(r"<h2>Price history</h2>(.*?)</section>", page, re.S)
     filtered = re.search(r"Filtered out \(1\)</summary>(.*?)</details>", page, re.S)
     assert listings and history and filtered
-    shown = listings.group(1).split("<details")[0]
+    shown = listings.group(1).split('<details class="filtered"')[0]
     assert "EXIT calendar #1" in shown
     assert "EXIT calendar #2" not in shown + history.group(1)
     assert "EXIT calendar #2" in filtered.group(1)

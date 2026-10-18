@@ -771,3 +771,20 @@ def test_digest_leaves_out_auctions_past_their_end(
     watch.tick(MORNING + timedelta(hours=3))  # 12:00 Pacific, still in the morning's search
 
     assert mailer.sent == []
+
+
+def test_listing_a_person_said_isnt_it_never_alerts(
+    store: Store, source: FakeListings, watch: Watch, mailer: FakeMailer
+) -> None:
+    item_id = calendar(store, target_dollars=60)
+    store.record_listings(item_id, Marketplace.BGG, [listing("1", 5), listing("2", 45)], MORNING)
+    [cheap] = [r for r in store.listings(item_id) if r.listing.external_id == "1"]
+    store.reject_listing(cheap.id, "Not this", by=store.users()[1].id)
+    source.shown = [listing("1", 5), listing("2", 45)]
+
+    watch.tick(MORNING)
+    watch.tick(MORNING + timedelta(hours=3))
+
+    texts = "\n".join(text for _, text in mailer.to("member@example.com"))
+    assert "#2" in texts
+    assert "#1" not in texts

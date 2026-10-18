@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from buy_assist.store import Store
 from buy_assist.watch import Watch
-from buy_assist.web import items, sales, settings
+from buy_assist.web import feedback, items, sales, settings
 from buy_assist.web.pages import PACKAGE_DIR, NoIdentity, Services, ask_identity
 
 __all__ = ["Services", "create_app"]
@@ -32,7 +32,7 @@ def create_app(
     app.state.services = services
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
     app.add_exception_handler(NoIdentity, ask_identity)
-    for module in (items, sales, settings):
+    for module in (items, sales, settings, feedback):
         app.include_router(module.router)
     return app
 

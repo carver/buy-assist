@@ -1,0 +1,11 @@
+{{ subject }}
+
+{{ buyer }} bought it for ${{ price }} all-in, so its alerts have stopped.
+{% if listing %}
+{{ listing.title }}
+{{ listing.marketplace.label }} · {{ listing.url }}
+{% endif %}
+{%- if item_url %}
+Item page: {{ item_url }}
+{% endif %}
+{% include "email/_footer.txt" %}

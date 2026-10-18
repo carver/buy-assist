@@ -47,7 +47,7 @@ Every listing source sits behind one interface (`listings.py`).
 - **BoardGameGeek GeekMarket:** active listings for items with a BGG link, in dollars and located in the US, in the item's edition when the listing names one.
 - **eBay**, through the Browse API (`ebay.py`): one search per item per day, by UPC when the item has one, else EPID, else its search words. It takes Buy It Now listings and auctions located in the US that deliver to the item's ZIP, in the item's acceptable condition, and eBay quotes shipping to that ZIP. When eBay gives no cost, the USPS estimate uses the seller's ZIP prefix. An auction with a Buy It Now price counts as Buy It Now. Pure auctions show their bids and end time on the item page and in the digest. Their bids don't count toward a new low or a rank, and they only alert when ending soon (see Alerts).
 
-Claude checks each eBay listing against the item the first time it's seen (`judge.py`) and rejects ones like "for parts", "box only", accessories, lots and other editions. Rejected listings never alert or reach the digest; the item page lists them under "Filtered out" with Claude's reason, so a wrong call is easy to spot. GeekMarket listings skip the check, since they're already tied to the game and edition.
+Claude checks each eBay listing against the item the first time it's seen (`judge.py`) and rejects ones like "for parts", "box only", accessories, lots and other editions, along with anything like a listing the household turned down (see Feedback). Rejected listings never alert or reach the digest; the item page lists them under "Filtered out" with Claude's reason, so a wrong call is easy to spot and put back. GeekMarket listings skip the check, since they're already tied to the game and edition.
 
 The Browse API doesn't return sold prices, and there's no free automated way to get them (see `docs/research/sold-prices.md`). Sold prices come from two places:
 
@@ -100,10 +100,11 @@ Each item has a page with current listings, price history, sold prices and the s
 
 There's no login. You pick who you are and a cookie remembers it. The tailnet is the security boundary.
 
-Feedback on a listing:
+Feedback on a listing, from the item page (`web/feedback.py`):
 
-- "not this", with an optional reason that gets added to the item's notes
-- "bought", which closes the item and records the final price
+- "not this", with an optional reason that gets added to the item's notes. The listing joins "Filtered out" with the reason and who said it, so it never alerts, reaches the digest or counts as a data point. With a reason, Claude checks the item's other current eBay listings again against the new notes, so one "German edition" clears out the rest.
+- "put back", on any filtered listing, Claude's or a person's. Claude never filters a put-back listing again.
+- "bought", on a current listing or one in price history (a won auction), or "bought elsewhere" on the item. It records the all-in price paid, prefilled from the listing and editable, closes the item, and emails its other watchers so nobody buys a second.
 
 Settings: home zip, people (name, email address, and whether they're the admin), the app address for links, tax rate per zip, reference-link domains and their use counts.
 

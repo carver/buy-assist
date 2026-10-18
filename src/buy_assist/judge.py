@@ -48,8 +48,10 @@ Return one verdict per listing:
 - matches: true if buying this listing gets the item, in an acceptable variant. False for \
 parts, pieces or accessories only, the box or packaging only, empty or incomplete sets, \
 lots and bundles of several, a different edition, language or size from the one wanted, \
-something merely compatible with the item, or anything else that isn't it. When the \
-listing is unclear but plausibly the item, say true.
+something merely compatible with the item, or anything else that isn't it. The item's \
+notes may say "Not this: <reason>" for a listing the household turned down; reject other \
+listings with the same problem. When the listing is unclear but plausibly the item, say \
+true.
 - reason: when matches is false, a few words a person will read (e.g. "Box only", \
 "German edition"); otherwise empty."""
 

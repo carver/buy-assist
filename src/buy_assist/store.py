@@ -20,6 +20,7 @@ from buy_assist.models import (
     ListingChanges,
     Marketplace,
     NoticeKind,
+    Purchase,
     RecordedListing,
     RecordedSale,
     Sale,
@@ -115,6 +116,22 @@ class Store:
             conn.execute(
                 "UPDATE items SET closed_at = ? WHERE id = ? AND closed_at IS NULL",
                 (datetime.now(UTC).isoformat(), item_id),
+            )
+            return _read_item(conn, item_id)
+
+    def buy_item(self, item_id: int, purchase: Purchase) -> Item:
+        """Record what an open item was bought for, and close it."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE items SET closed_at = ?, bought_price_cents = ?, bought_by = ?,"
+                " bought_listing_id = ? WHERE id = ? AND closed_at IS NULL",
+                (
+                    datetime.now(UTC).isoformat(),
+                    purchase.price_cents,
+                    purchase.buyer_id,
+                    purchase.listing_id,
+                    item_id,
+                ),
             )
             return _read_item(conn, item_id)
 
@@ -268,6 +285,30 @@ class Store:
                 (item_id,),
             ).fetchall()
             return [_read_listing(conn, row["id"]) for row in ids]
+
+    def get_listing(self, item_id: int, listing_id: int) -> RecordedListing | None:
+        """One of an item's listings; None if it isn't one of the item's."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM listings WHERE id = ? AND item_id = ?", (listing_id, item_id)
+            ).fetchone()
+            return _read_listing(conn, row["id"]) if row else None
+
+    def reject_listing(self, listing_id: int, reason: str, *, by: int | None) -> None:
+        """Filter a listing out as not the item, said by a person (`by`) or by Claude."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE listings SET rejection = ?, rejected_by = ?, kept = 0 WHERE id = ?",
+                (reason, by, listing_id),
+            )
+
+    def keep_listing(self, listing_id: int) -> None:
+        """Put a filtered listing back, for good: Claude won't filter it again."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE listings SET rejection = NULL, rejected_by = NULL, kept = 1 WHERE id = ?",
+                (listing_id,),
+            )
 
     def price_history(self, listing_id: int) -> list[tuple[datetime, int]]:
         """When a listing's price was seen and what it was, each change once."""
@@ -486,6 +527,8 @@ def _read_listing(conn: sqlite3.Connection, listing_id: int) -> RecordedListing:
         last_seen=datetime.fromisoformat(row["last_seen"]),
         ended_at=_optional_time(ended_at),
         rejection=row["rejection"],
+        rejected_by=row["rejected_by"],
+        kept=bool(row["kept"]),
     )
 
 
@@ -528,7 +571,9 @@ def _set_watchers(conn: sqlite3.Connection, item_id: int, watcher_ids: frozenset
 
 def _read_item(conn: sqlite3.Connection, item_id: int) -> Item:
     row = conn.execute(
-        f"SELECT id, {_ITEM_COLUMNS}, created_at, closed_at FROM items WHERE id = ?", (item_id,)
+        f"SELECT id, {_ITEM_COLUMNS}, created_at, closed_at, bought_price_cents, bought_by,"
+        " bought_listing_id FROM items WHERE id = ?",
+        (item_id,),
     ).fetchone()
     if row is None:
         raise ItemNotFoundError(item_id)
@@ -544,4 +589,7 @@ def _read_item(conn: sqlite3.Connection, item_id: int) -> Item:
         fields=fields,
         created_at=datetime.fromisoformat(row["created_at"]),
         closed_at=datetime.fromisoformat(closed_at) if closed_at else None,
+        purchase=Purchase(row["bought_price_cents"], row["bought_by"], row["bought_listing_id"])
+        if row["bought_price_cents"] is not None
+        else None,
     )

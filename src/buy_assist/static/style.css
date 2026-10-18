@@ -86,7 +86,7 @@ button.secondary { background: transparent; color: var(--text); border-color: va
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .notes { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.6rem 0.8rem; }
-.actions { display: flex; gap: 0.75rem; margin-top: 2rem; }
+.actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.75rem; margin-top: 2rem; }
 .actions form { margin: 0; }
 
 .notice { background: var(--notice); border-radius: 6px; padding: 0.5rem 0.8rem; }
@@ -125,9 +125,19 @@ button.link { background: none; border: none; padding: 0; color: var(--muted); t
 .paste summary, .filtered summary { cursor: pointer; color: var(--accent); }
 .filtered { margin-top: 1rem; }
 .steps { padding-left: 1.2rem; color: var(--muted); }
-a.button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
+a.button.secondary, summary.button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
 
 .all-in { color: var(--muted); font-size: 0.9rem; }
 .listings a { overflow-wrap: anywhere; }
 .tax-form { margin-top: 0.75rem; align-items: flex-end; }
 .tax-form button { margin-top: 0.35rem; }
+
+.feedback { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.3rem; font-size: 0.9rem; }
+.feedback summary { cursor: pointer; color: var(--muted); }
+.feedback details[open] { flex-basis: 100%; }
+form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.4rem 0 0; }
+form.inline input[name="reason"] { flex: 1 1 14rem; }
+form.inline input[name="price"] { width: 6rem; }
+.filtered li form { margin: 0.2rem 0 0; }
+.elsewhere summary { list-style: none; cursor: pointer; }
+.elsewhere summary::-webkit-details-marker { display: none; }
