@@ -4,7 +4,7 @@ across the web server's worker threads."""
 import json
 import sqlite3
 from collections import Counter
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -173,10 +173,19 @@ class Store:
             return cursor.rowcount > 0
 
     def record_listings(
-        self, item_id: int, marketplace: Marketplace, listings: Iterable[Listing], now: datetime
+        self,
+        item_id: int,
+        marketplace: Marketplace,
+        listings: Iterable[Listing],
+        now: datetime,
+        *,
+        rejections: Mapping[str, str] | None = None,
     ) -> ListingChanges:
         """Record what a marketplace shows for an item now. Its listings missing from this look
-        have ended; a listing seen again after ending is active again but not new."""
+        have ended; a listing seen again after ending is active again but not new.
+        `rejections` gives, by external id, why a new listing isn't the item; a listing keeps
+        the verdict it was first recorded with."""
+        rejections = rejections or {}
         seen_at = now.isoformat()
         new: list[int] = []
         repriced: list[int] = []
@@ -196,9 +205,15 @@ class Store:
                 values = _listing_values(listing)
                 if row is None:
                     cursor = conn.execute(
-                        f"INSERT INTO listings (item_id, {_LISTING_COLUMNS}, first_seen, last_seen)"
-                        f" VALUES (?, {', '.join('?' * len(values))}, ?, ?)",
-                        (item_id, *values, seen_at, seen_at),
+                        f"INSERT INTO listings (item_id, {_LISTING_COLUMNS}, first_seen, last_seen,"
+                        f" rejection) VALUES (?, {', '.join('?' * len(values))}, ?, ?, ?)",
+                        (
+                            item_id,
+                            *values,
+                            seen_at,
+                            seen_at,
+                            rejections.get(listing.external_id),
+                        ),
                     )
                     listing_id = cursor.lastrowid
                     assert listing_id is not None
@@ -234,6 +249,15 @@ class Store:
                 repriced=[_read_listing(conn, i) for i in repriced],
                 ended=[_read_listing(conn, i) for i in ended],
             )
+
+    def known_listing_ids(self, item_id: int, marketplace: Marketplace) -> set[str]:
+        """External ids of every listing ever recorded for the item on a marketplace."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT external_id FROM listings WHERE item_id = ? AND marketplace = ?",
+                (item_id, marketplace.value),
+            ).fetchall()
+        return {row["external_id"] for row in rows}
 
     def listings(self, item_id: int, *, include_ended: bool = False) -> list[RecordedListing]:
         """An item's listings, cheapest first."""
@@ -419,15 +443,22 @@ _LISTING_COLUMN_NAMES = (
     "edition",
     "origin_state",
     "origin_zip3",
+    "auction_ends_at",
+    "bid_count",
 )
 _LISTING_COLUMNS = ", ".join(_LISTING_COLUMN_NAMES)
 
 
 def _listing_values(listing: Listing) -> tuple[object, ...]:
-    return tuple(
-        listing.marketplace.value if name == "marketplace" else getattr(listing, name)
-        for name in _LISTING_COLUMN_NAMES
-    )
+    return tuple(_column_value(getattr(listing, name)) for name in _LISTING_COLUMN_NAMES)
+
+
+def _column_value(value: object) -> object:
+    if isinstance(value, Marketplace):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
 
 
 def _read_listing(conn: sqlite3.Connection, listing_id: int) -> RecordedListing:
@@ -448,11 +479,18 @@ def _read_listing(conn: sqlite3.Connection, listing_id: int) -> RecordedListing:
             edition=row["edition"],
             origin_state=row["origin_state"],
             origin_zip3=row["origin_zip3"],
+            auction_ends_at=_optional_time(row["auction_ends_at"]),
+            bid_count=row["bid_count"],
         ),
         first_seen=datetime.fromisoformat(row["first_seen"]),
         last_seen=datetime.fromisoformat(row["last_seen"]),
-        ended_at=datetime.fromisoformat(ended_at) if ended_at else None,
+        ended_at=_optional_time(ended_at),
+        rejection=row["rejection"],
     )
+
+
+def _optional_time(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
 
 
 def _dedupe_key(sale: Sale) -> str:

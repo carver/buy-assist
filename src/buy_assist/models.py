@@ -93,6 +93,13 @@ class Listing:
     edition: str | None = None
     origin_state: str | None = None
     origin_zip3: str | None = None
+    auction_ends_at: datetime | None = None
+    """Set for an auction with no Buy It Now price; its price is then the current bid."""
+    bid_count: int | None = None
+
+    @property
+    def is_auction(self) -> bool:
+        return self.auction_ends_at is not None
 
 
 @dataclass(frozen=True)
@@ -103,6 +110,8 @@ class RecordedListing:
     first_seen: datetime
     last_seen: datetime
     ended_at: datetime | None
+    rejection: str | None = None
+    """Why Claude judged this listing not to be the item, if it did."""
 
 
 @dataclass(frozen=True)

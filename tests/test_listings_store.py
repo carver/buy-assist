@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -84,3 +85,38 @@ def test_other_marketplaces_listings_are_left_alone(store: Store) -> None:
     store.record_listings(item.id, Marketplace.EBAY, [], DAY2)
 
     assert len(store.listings(item.id)) == 1
+
+
+def test_auction_details_read_back(store: Store) -> None:
+    item = store.create_item(ItemFields(name="Calendar"))
+    ends = datetime(2026, 10, 4, 1, 30, tzinfo=UTC)
+    auction = replace(listing("1", 12), auction_ends_at=ends, bid_count=3)
+
+    store.record_listings(item.id, Marketplace.BGG, [auction], DAY1)
+
+    [recorded] = store.listings(item.id)
+    assert recorded.listing == auction
+    assert recorded.listing.is_auction
+    assert not listing("2", 40).is_auction
+
+
+def test_rejections_are_kept_with_new_listings_only(store: Store) -> None:
+    item = store.create_item(ItemFields(name="Calendar"))
+    store.record_listings(
+        item.id, Marketplace.BGG, [listing("1", 40)], DAY1, rejections={"1": "Box only"}
+    )
+
+    store.record_listings(
+        item.id,
+        Marketplace.BGG,
+        [listing("1", 40), listing("2", 38)],
+        DAY2,
+        rejections={"1": "changed", "2": "Lot of 3"},
+    )
+
+    assert {r.listing.external_id: r.rejection for r in store.listings(item.id)} == {
+        "1": "Box only",
+        "2": "Lot of 3",
+    }
+    assert store.known_listing_ids(item.id, Marketplace.BGG) == {"1", "2"}
+    assert store.known_listing_ids(item.id, Marketplace.EBAY) == set()
