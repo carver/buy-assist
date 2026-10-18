@@ -100,6 +100,8 @@ Each item has a page with current listings, price history, sold prices and the s
 
 There's no login. You pick who you are and a cookie remembers it. The tailnet is the security boundary.
 
+Pages show times in the browser's time zone, which a cookie passes to the server (Pacific until it's set). Emails can't know where they'll be read, so their times are Pacific and say "PT".
+
 Feedback on a listing, from the item page (`web/feedback.py`):
 
 - "not this", with an optional reason that gets added to the item's notes. The listing joins "Filtered out" with the reason and who said it, so it never alerts, reaches the digest or counts as a data point. With a reason, Claude checks the item's other current eBay listings again against the new notes, so one "German edition" clears out the rest.

@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from buy_assist.ebay import sold_search_url
-from buy_assist.forms import describe_auction, describe_box, format_dollars, format_pounds
+from buy_assist.forms import LocalTime, describe_box, format_dollars, format_pounds
 from buy_assist.judge import ListingJudge
 from buy_assist.links import LinkReader
 from buy_assist.listings import ListingSource
@@ -29,7 +29,6 @@ _templates = Jinja2Templates(directory=PACKAGE_DIR / "templates")
 _templates.env.filters["dollars"] = format_dollars  # pyright: ignore[reportUnknownMemberType]
 _templates.env.filters["box"] = describe_box  # pyright: ignore[reportUnknownMemberType]
 _templates.env.filters["pounds"] = format_pounds  # pyright: ignore[reportUnknownMemberType]
-_templates.env.filters["auction"] = describe_auction  # pyright: ignore[reportUnknownMemberType]
 
 
 @dataclass(frozen=True)
@@ -92,7 +91,13 @@ def render(
     return _templates.TemplateResponse(
         request,
         name,
-        {"me": me, "users": store_of(request).users(), "conditions": list(Condition), **context},
+        {
+            "me": me,
+            "users": store_of(request).users(),
+            "conditions": list(Condition),
+            "when": LocalTime.named(request.cookies.get("tz")),
+            **context,
+        },
         status_code=status_code,
     )
 

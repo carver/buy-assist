@@ -633,7 +633,7 @@ def test_auctions_go_in_the_digest_only(store: Store, judge: FakeJudge, mailer: 
 
     [(subject, text)] = mailer.to("member@example.com")
     assert subject == "Buy Assistant digest: 1 new listing"
-    assert "auction, 3 bids, ends Mon Oct 19, 8:15pm" in text
+    assert "auction, 3 bids, ends Mon Oct 19, 8:15pm PT" in text
 
 
 def test_auction_bids_dont_count_toward_a_new_low(
@@ -676,7 +676,7 @@ def test_digest_reminds_of_auctions_ending_before_the_next_one(
     ]
     text = sent[1][1]
     assert "Ending soon" in text
-    assert "auction, 3 bids, ends Sun Oct 18, 8:15pm, bid checked Sun Oct 18, 12:00pm" in text
+    assert "auction, 3 bids, ends Sun Oct 18, 8:15pm PT, bid checked Sun Oct 18, 12:00pm PT" in text
     assert "Bid up to about $46.03 to stay within your $60.00 target." in text
 
 
@@ -714,7 +714,7 @@ def test_auction_ending_before_the_next_digest_alerts_at_once(
 
     [(subject, text)] = mailer.to("member@example.com")
     assert subject == "Auction ending soon: EXIT calendar"
-    assert "ends Sat Oct 17, 8:00pm, bid checked Sat Oct 17, 1:00pm" in text
+    assert "ends Sat Oct 17, 8:00pm PT, bid checked Sat Oct 17, 1:00pm PT" in text
     assert "Bid up to about $44.99 to beat the cheapest Buy It Now, $58.88 all-in." in text
 
 

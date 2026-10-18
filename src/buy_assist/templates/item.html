@@ -30,8 +30,8 @@
 <h1>{{ f.name }}</h1>
 {% if f.image_url %}<img src="{{ f.image_url }}" alt="" class="photo">{% endif %}
 {% for message in messages %}<p class="notice">{{ message }}</p>{% endfor %}
-{% if item.purchase %}<p class="notice">Bought by {{ names[item.purchase.buyer_id] }} for ${{ item.purchase.price_cents | dollars }} all-in, {{ item.closed_at.strftime("%b %-d, %Y") }}{% if bought_from %}, from <a href="{{ bought_from.listing.url }}" target="_blank" rel="noreferrer">{{ bought_from.listing.title }}</a>{% endif %}</p>
-{% elif not item.is_open %}<p class="notice">Closed {{ item.closed_at.strftime("%b %-d, %Y") }}</p>{% endif %}
+{% if item.purchase %}<p class="notice">Bought by {{ names[item.purchase.buyer_id] }} for ${{ item.purchase.price_cents | dollars }} all-in, {{ when.date(item.closed_at) }}{% if bought_from %}, from <a href="{{ bought_from.listing.url }}" target="_blank" rel="noreferrer">{{ bought_from.listing.title }}</a>{% endif %}</p>
+{% elif not item.is_open %}<p class="notice">Closed {{ when.date(item.closed_at) }}</p>{% endif %}
 <dl class="facts">
   <dt>Target</dt><dd>{% if f.target_price_cents is not none %}${{ f.target_price_cents | dollars }} all-in{% else %}not set yet{% endif %}</dd>
   <dt>Condition</dt><dd>{{ f.condition.value }}</dd>
@@ -61,7 +61,7 @@
         <span>{{ listing.condition }}</span>
       </div>
       <div><a href="{{ listing.url }}" target="_blank" rel="noreferrer">{{ listing.title }}</a></div>
-      <div class="aside">{{ listing.marketplace.label }}{% if listing.is_auction %} · {{ listing | auction }}{% endif %}{% if listing.origin_state %} · ships from {{ listing.origin_state }}{% elif listing.origin_zip3 %} · ships from ZIP {{ listing.origin_zip3 }}xx{% endif %} · seen since {{ recorded.first_seen.strftime("%b %-d") }}</div>
+      <div class="aside">{{ listing.marketplace.label }}{% if listing.is_auction %} · {{ when.auction(listing) }}{% endif %}{% if listing.origin_state %} · ships from {{ listing.origin_state }}{% elif listing.origin_zip3 %} · ships from ZIP {{ listing.origin_zip3 }}xx{% endif %} · seen since {{ when.day(recorded.first_seen) }}</div>
       {{ feedback(recorded, price) }}
     </li>
     {% endfor %}
@@ -77,7 +77,7 @@
       {% for recorded in filtered_out %}
       <li>
         <div><a href="{{ recorded.listing.url }}" target="_blank" rel="noreferrer">{{ recorded.listing.title }}</a></div>
-        <div class="aside">{{ recorded.rejection }} · {{ "Claude" if recorded.rejected_by is none else names[recorded.rejected_by] }} · ${{ recorded.listing.price_cents | dollars }} · {{ recorded.listing.marketplace.label }}{% if recorded.ended_at %} · gone {{ recorded.ended_at.strftime("%b %-d") }}{% endif %}</div>
+        <div class="aside">{{ recorded.rejection }} · {{ "Claude" if recorded.rejected_by is none else names[recorded.rejected_by] }} · ${{ recorded.listing.price_cents | dollars }} · {{ recorded.listing.marketplace.label }}{% if recorded.ended_at %} · gone {{ when.day(recorded.ended_at) }}{% endif %}</div>
         {% if item.is_open %}<form method="post" action="/items/{{ item.id }}/listings/{{ recorded.id }}/put-back"><button class="link">put back</button></form>{% endif %}
       </li>
       {% endfor %}
@@ -93,7 +93,7 @@
     <li>
       <div class="sale-head">
         {{ full_price(price) }}
-        <span class="aside">{{ recorded.listing.marketplace.label }}{% if recorded.listing.is_auction %} · auction, last bid{% endif %} · listed {{ recorded.first_seen.strftime("%b %-d") }}, gone {{ recorded.ended_at.strftime("%b %-d") }}</span>
+        <span class="aside">{{ recorded.listing.marketplace.label }}{% if recorded.listing.is_auction %} · auction, last bid{% endif %} · listed {{ when.day(recorded.first_seen) }}, gone {{ when.day(recorded.ended_at) }}</span>
       </div>
       <div class="sale-title">{{ recorded.listing.title }}</div>
       {{ feedback(recorded, price) }}

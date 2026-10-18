@@ -14,7 +14,7 @@ from datetime import date, datetime, time, timedelta
 from statistics import median
 
 from buy_assist.claude import ParseError
-from buy_assist.forms import describe_auction, describe_time, format_dollars
+from buy_assist.forms import LocalTime, format_dollars
 from buy_assist.judge import ListingJudge
 from buy_assist.listings import ListingError, ListingSource
 from buy_assist.mailer import Mailer
@@ -36,6 +36,9 @@ NEW_LOW_MIN_DATA_POINTS = 5
 FIRST_FOUND_WINDOW = timedelta(days=2)
 """How soon after an item's first listing turns up a "first listing found" alert still makes
 sense. Later, say for a watcher added weeks on, the digest covers it instead."""
+
+# Emails can't know the reader's time zone, so their times say which they're in.
+_EMAIL_TIME = LocalTime(PACIFIC, "PT")
 
 _HEADINGS = {
     NoticeKind.AT_TARGET: "At your target",
@@ -295,7 +298,9 @@ class Watch:
         """'auction, 3 bids, ends ..., bid checked .... Bid up to $46.03 to ...'. The bid is
         from the last search, up to a day old."""
         listing = p.listing.listing
-        note = f"{describe_auction(listing)}, bid checked {describe_time(p.listing.last_seen)}."
+        note = (
+            f"{_EMAIL_TIME.auction(listing)}, bid checked {_EMAIL_TIME.time(p.listing.last_seen)}."
+        )
         rate = self._pricer.listing_tax_rate(item.fields, listing)
         if limit is None or p.price.shipping_cents is None or rate is None:
             return note
@@ -357,7 +362,7 @@ class Watch:
                 _DigestLine(
                     p.listing,
                     p.price,
-                    describe_auction(p.listing.listing) or _rank(p.price.total_cents, totals),
+                    _EMAIL_TIME.auction(p.listing.listing) or _rank(p.price.total_cents, totals),
                 )
                 for p in priced
                 if p.listing.ended_at is None

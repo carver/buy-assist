@@ -149,7 +149,7 @@ def test_gone_listings_move_to_price_history(member: TestClient, store: Store) -
     history = re.search(r"<h2>Price history</h2>(.*?)</section>", page, re.S)
     assert history is not None
     assert "EXIT calendar #1" in history.group(1)
-    assert "gone Oct 20" in history.group(1)
+    assert "gone Oct 19" in history.group(1)  # midnight UTC is the evening before in Pacific
 
 
 def test_sold_summary_shows_typical_all_in_price(member: TestClient) -> None:
