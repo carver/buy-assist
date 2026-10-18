@@ -117,6 +117,14 @@ Moving to a real server should mean copying the code and the SQLite file, then a
 
 eBay search needs a production keyset from the eBay developer program: `EBAY_CLIENT_ID` (App ID) and `EBAY_CLIENT_SECRET` (Cert ID) in `/etc/sandbox-secrets.sh`. eBay won't activate production keys until the app either takes marketplace account deletion notices or claims the exemption; we store no eBay user data, so claim the exemption. Without the keys the app runs with GeekMarket alone and says so in its log.
 
+When the eBay keys arrive:
+
+1. Add them to `/etc/sandbox-secrets.sh` as `export EBAY_CLIENT_ID=...` and `export EBAY_CLIENT_SECRET=...`.
+2. In the eBay developer portal, claim the marketplace account deletion exemption, so eBay activates the keyset.
+3. Stop the running `buy-assist` process. The keepalive starts it again with the keys within 5 minutes, and its log stops warning that eBay search is off.
+4. Run `uv run pytest -m live tests/test_ebay_listings.py`. The tests' eBay response was built from eBay's published field names, not captured, so expect small fixes to `ebay.py` and to `tests/data/ebay_search_exit.json`.
+5. Settle the open questions at the end of `docs/research/apis.md`.
+
 Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 6767. `--no-watch` serves the pages without fetching or sending email. Email needs `PURELYMAIL_ADDRESS` and `PURELYMAIL_PASSWORD` in the environment; without them the app runs and sends nothing. eBay search needs `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` likewise.
 
 To keep it running, `python3 install.py` installs dependencies and adds crontab entries that run `scripts/serve.sh` every 5 minutes and at boot. That script starts the app, with the Purelymail and eBay credentials from `/etc/sandbox-secrets.sh`, whenever it isn't answering, and logs to `data/server.log`. `python3 install.py remove` takes the entries out.
