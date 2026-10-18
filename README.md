@@ -117,7 +117,7 @@ To keep it running, `python3 install.py` installs dependencies and adds crontab 
 
 ## Development
 
-`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Run `uv run pre-commit install` once per clone, so commits run ruff. Pyright and the tests are too slow for that hook, so they live in `scripts/agent-pre-commit`. To have agents' commits run it, link it in with `ln -s ../../scripts/agent-pre-commit .git/hooks/agent-pre-commit` and run `agent-commit-gate --install .`. Run it by hand before your own commits. CI runs the same checks on pushes to main and on pull requests.
+`uv run pytest` runs the tests. Tests marked `live` call real services such as `claude-json` and are skipped by default; run them with `uv run pytest -m live`. Link the git hook in once per clone with `ln -sf ../../scripts/git-pre-commit .git/hooks/pre-commit`, so commits run ruff. The hook runs pre-commit through `uvx` rather than `.venv`, so it also works from the host, which shares this checkout but can't run the sandbox's `.venv`. Pyright and the tests are too slow for that hook, so they live in `scripts/agent-pre-commit`. To have agents' commits run it, link it in with `ln -s ../../scripts/agent-pre-commit .git/hooks/agent-pre-commit` and run `agent-commit-gate --install .`. Run it by hand before your own commits. CI runs the same checks on pushes to main and on pull requests.
 
 ## Build order
 
