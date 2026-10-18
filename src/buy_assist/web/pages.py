@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from buy_assist.ebay import sold_search_url
-from buy_assist.forms import LocalTime, describe_box, format_dollars, format_pounds
+from buy_assist.forms import describe_box, format_dollars, format_pounds
 from buy_assist.judge import ListingJudge
 from buy_assist.links import LinkReader
 from buy_assist.listings import ListingSource
@@ -22,6 +22,7 @@ from buy_assist.prices import summarize_sales
 from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceSource
 from buy_assist.store import Store
+from buy_assist.times import LocalTime
 
 PACKAGE_DIR = Path(__file__).parent.parent
 
@@ -95,7 +96,7 @@ def render(
             "me": me,
             "users": store_of(request).users(),
             "conditions": list(Condition),
-            "when": LocalTime.named(request.cookies.get("tz")),
+            "local": LocalTime.named(request.cookies.get("tz")),
             **context,
         },
         status_code=status_code,

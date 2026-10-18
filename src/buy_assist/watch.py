@@ -14,7 +14,7 @@ from datetime import date, datetime, time, timedelta
 from statistics import median
 
 from buy_assist.claude import ParseError
-from buy_assist.forms import LocalTime, format_dollars
+from buy_assist.forms import format_dollars
 from buy_assist.judge import ListingJudge
 from buy_assist.listings import ListingError, ListingSource
 from buy_assist.mailer import Mailer
@@ -24,6 +24,7 @@ from buy_assist.prices import FullPrice, max_bid_cents
 from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceError, SoldPriceSource
 from buy_assist.store import Store
+from buy_assist.times import LocalTime
 
 _log = logging.getLogger(__name__)
 

@@ -70,12 +70,14 @@ def test_closed_and_bought_dates_are_the_browsers_date(
         store.buy_item(item_id, Purchase(price_cents=4000, buyer_id=1, listing_id=None))
     else:
         store.close_item(item_id)
-    member.cookies.set("tz", "Pacific/Kiritimati")  # UTC+14, a day ahead of Pacific
-
-    page = member.get(f"/items/{item_id}").text
-
     item = store.get_item(item_id)
     assert item and item.closed_at
-    day = item.closed_at.astimezone(ZoneInfo("Pacific/Kiritimati")).strftime("%b %-d, %Y")
-    notice = re.search(r'<p class="notice">(.*?)</p>', page, re.S)
-    assert notice and day in notice.group(1)
+    # 25 hours apart, so the two always see different dates.
+    zones = ["Pacific/Kiritimati", "Pacific/Pago_Pago"]
+    days = [item.closed_at.astimezone(ZoneInfo(z)).strftime("%b %-d, %Y") for z in zones]
+    assert days[0] != days[1]
+
+    for zone, day in zip(zones, days, strict=True):
+        member.cookies.set("tz", zone)
+        notice = re.search(r'<p class="notice">(.*?)</p>', member.get(f"/items/{item_id}").text)
+        assert notice and day in notice.group(1)
