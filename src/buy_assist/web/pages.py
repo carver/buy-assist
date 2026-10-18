@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from buy_assist.ebay import sold_search_url
-from buy_assist.forms import describe_box, format_dollars, format_pounds
+from buy_assist.forms import describe_auction, describe_box, format_dollars, format_pounds
 from buy_assist.judge import ListingJudge
 from buy_assist.links import LinkReader
 from buy_assist.listings import ListingSource
@@ -29,6 +29,7 @@ _templates = Jinja2Templates(directory=PACKAGE_DIR / "templates")
 _templates.env.filters["dollars"] = format_dollars  # pyright: ignore[reportUnknownMemberType]
 _templates.env.filters["box"] = describe_box  # pyright: ignore[reportUnknownMemberType]
 _templates.env.filters["pounds"] = format_pounds  # pyright: ignore[reportUnknownMemberType]
+_templates.env.filters["auction"] = describe_auction  # pyright: ignore[reportUnknownMemberType]
 
 
 @dataclass(frozen=True)
@@ -102,10 +103,8 @@ def item_page(
     store = store_of(request)
     pricer = Pricer(store, _services(request).shipping)
     sales = [(r, pricer.sale(item.fields, r.sale)) for r in store.sales(item.id)]
-    listings = [
-        (r, pricer.listing(item.fields, r.listing))
-        for r in store.listings(item.id, include_ended=True)
-    ]
+    recorded = store.listings(item.id, include_ended=True)
+    listings = [(r, pricer.listing(item.fields, r.listing)) for r in recorded if not r.rejection]
     return render(
         request,
         "item.html",
@@ -121,6 +120,7 @@ def item_page(
             key=lambda rp: rp[0].ended_at or rp[0].last_seen,
             reverse=True,
         ),
+        filtered_out=[r for r in recorded if r.rejection],
         summary=summarize_sales(
             (r.sale for r, _ in sales), lambda sale: pricer.sale(item.fields, sale).total_cents
         ),

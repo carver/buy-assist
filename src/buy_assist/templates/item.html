@@ -36,12 +36,26 @@
         <span>{{ listing.condition }}</span>
       </div>
       <div><a href="{{ listing.url }}" target="_blank" rel="noreferrer">{{ listing.title }}</a></div>
-      <div class="aside">{{ listing.marketplace.label }}{% if listing.origin_state %} · ships from {{ listing.origin_state }}{% endif %} · seen since {{ recorded.first_seen.strftime("%b %-d") }}</div>
+      <div class="aside">{{ listing.marketplace.label }}{% if listing.is_auction %} · {{ listing | auction }}{% endif %}{% if listing.origin_state %} · ships from {{ listing.origin_state }}{% elif listing.origin_zip3 %} · ships from ZIP {{ listing.origin_zip3 }}xx{% endif %} · seen since {{ recorded.first_seen.strftime("%b %-d") }}</div>
     </li>
     {% endfor %}
   </ul>
   {% else %}
   <p class="empty">No listings found yet.</p>
+  {% endif %}
+  {% if filtered_out %}
+  <details class="filtered">
+    <summary>Filtered out ({{ filtered_out | length }})</summary>
+    <p class="aside">Claude judged these aren't the item, so they never alert or reach the digest.</p>
+    <ul class="sales">
+      {% for recorded in filtered_out %}
+      <li>
+        <div><a href="{{ recorded.listing.url }}" target="_blank" rel="noreferrer">{{ recorded.listing.title }}</a></div>
+        <div class="aside">{{ recorded.rejection }} · ${{ recorded.listing.price_cents | dollars }} · {{ recorded.listing.marketplace.label }}{% if recorded.ended_at %} · gone {{ recorded.ended_at.strftime("%b %-d") }}{% endif %}</div>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
   {% endif %}
 </section>
 <section>
@@ -52,7 +66,7 @@
     <li>
       <div class="sale-head">
         {{ full_price(price) }}
-        <span class="aside">{{ recorded.listing.marketplace.label }} · listed {{ recorded.first_seen.strftime("%b %-d") }}, gone {{ recorded.ended_at.strftime("%b %-d") }}</span>
+        <span class="aside">{{ recorded.listing.marketplace.label }}{% if recorded.listing.is_auction %} · auction, last bid{% endif %} · listed {{ recorded.first_seen.strftime("%b %-d") }}, gone {{ recorded.ended_at.strftime("%b %-d") }}</span>
       </div>
       <div class="sale-title">{{ recorded.listing.title }}</div>
     </li>

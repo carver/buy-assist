@@ -1,5 +1,6 @@
 import re
 import time
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -195,3 +196,67 @@ def test_estimate_with_unknown_origin_shows_its_range(member: TestClient, store:
     store.record_listings(item_id, Marketplace.BGG, [unknown_origin], SEEN)
 
     assert "est. $9.00&ndash;$16.00" in member.get(f"/items/{item_id}").text
+
+
+def ebay_listing(external_id: str, dollars: int) -> Listing:
+    return replace(
+        bgg_listing(external_id, dollars),
+        marketplace=Marketplace.EBAY,
+        url=f"https://www.ebay.com/itm/{external_id}",
+    )
+
+
+def test_filtered_out_listings_are_listed_apart_with_claudes_reason(
+    member: TestClient, store: Store
+) -> None:
+    item_id = add_item(member)
+    store.record_listings(
+        item_id,
+        Marketplace.EBAY,
+        [ebay_listing("1", 45), ebay_listing("2", 5)],
+        SEEN,
+        rejections={"2": "Box only"},
+    )
+    store.record_listings(item_id, Marketplace.EBAY, [ebay_listing("1", 45)], SEEN + timedelta(1))
+
+    page = member.get(f"/items/{item_id}").text
+
+    listings = re.search(r"<h2>Listings</h2>(.*?)</section>", page, re.S)
+    history = re.search(r"<h2>Price history</h2>(.*?)</section>", page, re.S)
+    filtered = re.search(r"Filtered out \(1\)</summary>(.*?)</details>", page, re.S)
+    assert listings and history and filtered
+    shown = listings.group(1).split("<details")[0]
+    assert "EXIT calendar #1" in shown
+    assert "EXIT calendar #2" not in shown + history.group(1)
+    assert "EXIT calendar #2" in filtered.group(1)
+    assert "Box only" in filtered.group(1)
+
+
+def test_auctions_show_bids_and_end_time(member: TestClient, store: Store) -> None:
+    item_id = add_item(member)
+    auction = replace(
+        ebay_listing("1", 12),
+        auction_ends_at=datetime(2026, 10, 20, 3, 15, tzinfo=UTC),
+        bid_count=1,
+    )
+    store.record_listings(item_id, Marketplace.EBAY, [auction], SEEN)
+
+    page = member.get(f"/items/{item_id}").text
+
+    assert "auction, 1 bid, ends Mon Oct 19, 8:15pm" in page
+
+
+def test_ended_auction_shows_as_a_last_bid_in_price_history(
+    member: TestClient, store: Store
+) -> None:
+    item_id = add_item(member)
+    auction = replace(
+        ebay_listing("1", 12), auction_ends_at=datetime(2026, 10, 18, tzinfo=UTC), bid_count=4
+    )
+    store.record_listings(item_id, Marketplace.EBAY, [auction], SEEN)
+    store.record_listings(item_id, Marketplace.EBAY, [], SEEN + timedelta(days=2))
+
+    page = member.get(f"/items/{item_id}").text
+
+    history = re.search(r"<h2>Price history</h2>(.*?)</section>", page, re.S)
+    assert history and "auction, last bid" in history.group(1)
