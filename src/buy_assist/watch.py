@@ -11,18 +11,15 @@ import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from pathlib import Path
 from statistics import median
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-
 from buy_assist.claude import ParseError
-from buy_assist.domains import ReferenceDomain, reference_domains
 from buy_assist.forms import describe_auction, describe_time, format_dollars
 from buy_assist.judge import ListingJudge
 from buy_assist.listings import ListingError, ListingSource
-from buy_assist.mailer import Mailer, MailerError
+from buy_assist.mailer import Mailer
 from buy_assist.models import PACIFIC, Item, Listing, NoticeKind, RecordedListing, User
+from buy_assist.outbox import Outbox
 from buy_assist.prices import FullPrice, max_bid_cents
 from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceError, SoldPriceSource
@@ -46,12 +43,6 @@ _HEADINGS = {
     NoticeKind.FIRST_FOUND: "First listing found",
     NoticeKind.ENDING_SOON: "Auction ending soon",
 }
-_EMAIL_TEMPLATES = Environment(
-    loader=FileSystemLoader(Path(__file__).parent / "templates"),
-    autoescape=select_autoescape(["html"]),
-    keep_trailing_newline=True,
-)
-_EMAIL_TEMPLATES.filters["dollars"] = format_dollars  # pyright: ignore[reportArgumentType]
 
 
 @dataclass(frozen=True)
@@ -135,12 +126,6 @@ class _DigestEntry:
     """Auctions that end before the next digest."""
 
 
-@dataclass(frozen=True)
-class _Recipient:
-    user: User
-    email: str
-
-
 class Watch:
     def __init__(
         self,
@@ -157,7 +142,7 @@ class Watch:
         self._judge = judge
         self._sold = sold_prices
         self._pricer = Pricer(store, shipping)
-        self._mailer = mailer
+        self._outbox = Outbox(store, mailer) if mailer else None
 
     def tick(self, now: datetime) -> None:
         items = self._store.list_items(open_items=True)
@@ -167,12 +152,12 @@ class Watch:
                 fetch_listings(self._store, due, self._judge, item, now)
         if self._due("sold", now, SOLD_REFRESH_EVERY) and self._refresh_sold(items):
             self._store.set_last_run("sold", now)
-        if self._mailer is None:
+        if self._outbox is None:
             return
         for item in items:
-            self._send_alerts(self._mailer, item, now)
+            self._send_alerts(self._outbox, item, now)
         if now.astimezone(PACIFIC).time() >= DIGEST_TIME:
-            self._send_digests(self._mailer, items, now)
+            self._send_digests(self._outbox, items, now)
 
     def _due(self, job: str, now: datetime, every: timedelta) -> bool:
         last = self._store.last_run(job)
@@ -202,7 +187,7 @@ class Watch:
         ]
         return sorted(priced, key=lambda p: p.price.total_cents)
 
-    def _send_alerts(self, mailer: Mailer, item: Item, now: datetime) -> None:
+    def _send_alerts(self, outbox: Outbox, item: Item, now: datetime) -> None:
         priced = self._priced(item)
         if not priced:
             return
@@ -211,7 +196,7 @@ class Watch:
             for r in self._store.sales(item.id)
             if (price := self._pricer.sale(item.fields, r.sale)).complete
         ]
-        for recipient in self._recipients(item):
+        for recipient in outbox.watchers(item):
             reasons = self._reasons(item, recipient.user, priced, sale_totals, now)
             if not reasons:
                 continue
@@ -222,9 +207,9 @@ class Watch:
                 "item": item.fields,
                 "lines": lines,
                 "first_found": any(r.kind is NoticeKind.FIRST_FOUND for r in reasons),
-                "item_url": self._item_url(item),
+                "item_url": outbox.item_url(item),
             }
-            if self._send(mailer, recipient, subject, "alert", context):
+            if outbox.send(recipient, subject, "alert", context):
                 for reason in reasons:
                     self._store.log_notice(reason.listing.id, recipient.user.id, reason.kind, now)
 
@@ -328,20 +313,20 @@ class Watch:
         last = self._store.last_run(_digest_job(user))
         return last is not None and last.astimezone(PACIFIC).date() >= day
 
-    def _send_digests(self, mailer: Mailer, items: list[Item], now: datetime) -> None:
+    def _send_digests(self, outbox: Outbox, items: list[Item], now: datetime) -> None:
         """Today's digest for everyone who hasn't had one yet today. Each person's day is
         tracked on its own, so one failed send can't double anyone else's digest."""
         today = now.astimezone(PACIFIC).date()
-        for recipient in self._everyone_with_email():
+        for recipient in outbox.everyone():
             if self._had_digest(recipient.user, today):
                 continue
             before = _digest_due_by(today + timedelta(days=1))
-            entries = self._digest_entries(recipient.user, items, now, before)
+            entries = self._digest_entries(outbox, recipient.user, items, now, before)
             if not entries:
                 continue
             subject = _digest_subject(entries)
             context: dict[str, object] = {"subject": subject, "entries": entries}
-            if not self._send(mailer, recipient, subject, "digest", context):
+            if not outbox.send(recipient, subject, "digest", context):
                 continue
             self._store.set_last_run(_digest_job(recipient.user), now)
             for entry in entries:
@@ -355,7 +340,7 @@ class Watch:
                     )
 
     def _digest_entries(
-        self, user: User, items: list[Item], now: datetime, before: datetime
+        self, outbox: Outbox, user: User, items: list[Item], now: datetime, before: datetime
     ) -> list[_DigestEntry]:
         """Per item, auctions ending before `before`, then new listings: ones this person
         hasn't heard about in any way yet."""
@@ -381,44 +366,8 @@ class Watch:
                 and not self._store.noticed(p.listing.id, user.id)
             ]
             if lines or ending:
-                entries.append(_DigestEntry(item, self._item_url(item), lines, ending))
+                entries.append(_DigestEntry(item, outbox.item_url(item), lines, ending))
         return entries
-
-    def _everyone_with_email(self) -> list[_Recipient]:
-        return [_Recipient(u, u.email) for u in self._store.users() if u.email]
-
-    def _recipients(self, item: Item) -> list[_Recipient]:
-        return [r for r in self._everyone_with_email() if r.user.id in item.fields.watcher_ids]
-
-    def _reminders(self, user: User) -> list[ReferenceDomain]:
-        """For the admin's footer: reference-link sites that deserve their own reader."""
-        if not user.is_admin:
-            return []
-        return [d for d in reference_domains(self._store) if d.wants_reader]
-
-    def _item_url(self, item: Item) -> str | None:
-        address = self._store.app_address()
-        return f"{address.rstrip('/')}/items/{item.id}" if address else None
-
-    def _send(
-        self,
-        mailer: Mailer,
-        recipient: _Recipient,
-        subject: str,
-        template: str,
-        context: dict[str, object],
-    ) -> bool:
-        """Send one email. Every email gets `reminders` for its footer (see
-        email/_footer.*), so each template must include that footer."""
-        context = {**context, "reminders": self._reminders(recipient.user)}
-        text = _EMAIL_TEMPLATES.get_template(f"email/{template}.txt").render(context)
-        html = _EMAIL_TEMPLATES.get_template(f"email/{template}.html").render(context)
-        try:
-            mailer.send(recipient.email, subject, text, html)
-        except MailerError as e:
-            _log.warning("Mail to %s: %s", recipient.user.name, e)
-            return False
-        return True
 
 
 def fetch_listings(
