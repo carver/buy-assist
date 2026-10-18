@@ -237,25 +237,16 @@ class Watch:
         """Today's digest for everyone who hasn't had one yet today. Each person's day is
         tracked on its own, so one failed send can't double anyone else's digest."""
         today = now.astimezone(PACIFIC).date()
-        wanted = [d for d in reference_domains(self._store) if d.wants_reader]
-        reminded = self._store.reminded_domains()
         for recipient in self._everyone_with_email():
             job = f"digest:{recipient.user.id}"
             last = self._store.last_run(job)
             if last is not None and last.astimezone(PACIFIC).date() >= today:
                 continue
             entries = self._digest_entries(recipient.user, items)
-            reminders = (
-                [d for d in wanted if d.domain not in reminded] if recipient.user.is_admin else []
-            )
-            if not entries and not reminders:
+            if not entries:
                 continue
-            subject = _digest_subject(entries, reminders)
-            context: dict[str, object] = {
-                "subject": subject,
-                "entries": entries,
-                "reminders": reminders,
-            }
+            subject = _digest_subject(entries)
+            context: dict[str, object] = {"subject": subject, "entries": entries}
             if not self._send(mailer, recipient, subject, "digest", context):
                 continue
             self._store.set_last_run(job, now)
@@ -264,9 +255,6 @@ class Watch:
                     self._store.log_notice(
                         line.listing.id, recipient.user.id, NoticeKind.DIGEST, now
                     )
-            if reminders:
-                reminded |= {d.domain for d in reminders}
-                self._store.set_reminded_domains(reminded)
 
     def _digest_entries(self, user: User, items: list[Item]) -> list[_DigestEntry]:
         """New listings per item: ones this person hasn't heard about in any way yet."""
@@ -291,6 +279,12 @@ class Watch:
     def _recipients(self, item: Item) -> list[_Recipient]:
         return [r for r in self._everyone_with_email() if r.user.id in item.fields.watcher_ids]
 
+    def _reminders(self, user: User) -> list[ReferenceDomain]:
+        """For the admin's footer: reference-link sites that deserve their own reader."""
+        if not user.is_admin:
+            return []
+        return [d for d in reference_domains(self._store) if d.wants_reader]
+
     def _item_url(self, item: Item) -> str | None:
         address = self._store.app_address()
         return f"{address.rstrip('/')}/items/{item.id}" if address else None
@@ -303,6 +297,7 @@ class Watch:
         template: str,
         context: dict[str, object],
     ) -> bool:
+        context = {**context, "reminders": self._reminders(recipient.user)}
         text = _EMAIL_TEMPLATES.get_template(f"email/{template}.txt").render(context)
         html = _EMAIL_TEMPLATES.get_template(f"email/{template}.html").render(context)
         try:
@@ -345,10 +340,6 @@ def _rank(total: int, totals: list[int]) -> str:
     return f"{where} of {len(totals)} seen, median ${format_dollars(round(median(totals)))}"
 
 
-def _digest_subject(entries: list[_DigestEntry], reminders: list[ReferenceDomain]) -> str:
+def _digest_subject(entries: list[_DigestEntry]) -> str:
     count = sum(len(entry.lines) for entry in entries)
-    if count:
-        return f"Buy Assistant digest: {count} new listing{'' if count == 1 else 's'}"
-    if len(reminders) == 1:
-        return "Buy Assistant digest: a reference-link reader to write"
-    return f"Buy Assistant digest: {len(reminders)} reference-link readers to write"
+    return f"Buy Assistant digest: {count} new listing{'' if count == 1 else 's'}"

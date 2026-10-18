@@ -7,4 +7,4 @@
 <span style="color: #6b665e">{{ line.listing.listing.condition }} · {{ line.listing.listing.marketplace.label }}</span></p>
 {% endfor %}
 {% if first_found %}<p style="color: #6b665e">The rest will come in your daily digest.</p>{% endif %}
-</div>
+{% include "email/_footer.html" %}</div>

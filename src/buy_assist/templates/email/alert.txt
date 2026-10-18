@@ -11,3 +11,4 @@ The rest will come in your daily digest.
 {%- if item_url %}
 Item page: {{ item_url }}
 {% endif %}
+{% include "email/_footer.txt" %}

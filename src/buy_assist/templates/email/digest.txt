@@ -6,7 +6,4 @@
   {{ price_line(line.price) }}
   {{ line.listing.listing.condition }} · {{ line.rank }} · {{ line.listing.listing.url }}
 {% endfor %}{% endfor %}
-{%- if reminders %}
-Reference-link sites worth a dedicated reader:
-{% for d in reminders %}- {{ d.domain }} ({{ d.item_count }} items)
-{% endfor %}{% endif %}
+{% include "email/_footer.txt" %}

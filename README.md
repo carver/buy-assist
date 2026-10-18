@@ -36,7 +36,7 @@ Most sites get the generic reader. It fetches the page (public hosts only), take
 
 BoardGameGeek has its own reader, since its pages sit behind a Cloudflare challenge. It uses the JSON API the BGG site itself calls (`api.geekdo.com`), at most one request every 5 seconds. BGG lists a game's editions, so the form offers them as a dropdown; picking one fills in that edition's title and publisher product code. BGG editions carry product codes, not UPCs. Once BGG approves our app, the reader can move to the official XML API (see `docs/research/apis.md`).
 
-The settings page counts items per reference-link domain. A domain with 3 or more items and no dedicated reader gets flagged as worth writing one; admin's digest will carry the same reminder.
+The settings page counts items per reference-link domain. A domain with 3 or more items and no dedicated reader gets flagged as worth writing one, and the same list goes at the foot of every email to the admin.
 
 Test fixture: [EXIT: The Game Advent Calendar: The Hunt for the Golden Book](https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol).
 
@@ -82,7 +82,9 @@ Instant alerts:
 
 A listing that triggers more than one alert appears once in the email, with each reason.
 
-Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Skipped when nothing is new. If the app is down at 11:30, the digest goes out when it's back, the same day only. The admin's digest also carries the reference-link reader reminder, once per site.
+Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Skipped when nothing is new. If the app is down at 11:30, the digest goes out when it's back, the same day only.
+
+Every alert and digest to the admin ends with the reference-link sites worth a reader. That footer never sends an email on its own.
 
 Alerts are worked out from what's stored, and a log of who heard about which listing stops repeats, so an email that fails to send goes out on the next hourly tick.
 
@@ -97,7 +99,7 @@ Feedback on a listing:
 - "not this", with an optional reason that gets added to the item's notes
 - "bought", which closes the item and records the final price
 
-Settings: home zip, email addresses, the app address for links, tax rate per zip, reference-link domains and their use counts.
+Settings: home zip, people (name, email address, and whether they're the admin), the app address for links, tax rate per zip, reference-link domains and their use counts.
 
 ## Running it
 

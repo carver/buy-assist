@@ -6,8 +6,4 @@
 {{ price_line(line.price) }}<br>
 <span style="color: #6b665e">{{ line.listing.listing.condition }} · {{ line.rank }}</span></p>
 {% endfor %}{% endfor %}
-{% if reminders %}
-<p style="margin-top: 1.5rem"><strong>Reference-link sites worth a dedicated reader</strong></p>
-<ul>{% for d in reminders %}<li>{{ d.domain }} ({{ d.item_count }} items)</li>{% endfor %}</ul>
-{% endif %}
-</div>
+{% include "email/_footer.html" %}</div>

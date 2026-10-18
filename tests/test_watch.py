@@ -312,26 +312,49 @@ def test_closed_items_are_not_watched(
     assert mailer.sent == []
 
 
-def test_admin_digest_carries_reader_reminder_once(
-    store: Store, watch: Watch, mailer: FakeMailer
-) -> None:
+def pans(store: Store, site: str) -> None:
+    """Three items with reference links on one site, enough for it to deserve a reader."""
     admin = store.users()[0]
     for n in range(3):
         store.create_item(
             ItemFields(
                 name=f"Pan {n}",
-                reference_url=f"https://shop.example/{n}",
+                reference_url=f"https://{site}/{n}",
                 watcher_ids=frozenset({admin.id}),
             )
         )
 
-    watch.tick(MORNING + timedelta(hours=3))
+
+def test_every_admin_email_ends_with_the_reader_reminder(
+    store: Store, source: FakeListings, watch: Watch, mailer: FakeMailer
+) -> None:
+    pans(store, "shop.example")
+    calendar(store, watchers="Admin,Member")
+    source.shown = [listing("1", 45)]
+    watch.tick(MORNING)
+    source.shown = [listing("1", 45), listing("2", 50)]
     watch.tick(MORNING + timedelta(days=1, hours=3))
 
-    [(subject, text)] = mailer.to("admin@example.com")
-    assert subject == "Buy Assistant digest: a reference-link reader to write"
-    assert "shop.example" in text
-    assert mailer.to("member@example.com") == []
+    to_admin = [(s, text, html) for to, s, text, html in mailer.sent if to == "admin@example.com"]
+    assert [s for s, _, _ in to_admin] == [
+        "First listing found: EXIT calendar",
+        "Buy Assistant digest: 1 new listing",
+    ]
+    for _, text, html in to_admin:
+        assert "shop.example (3 items)" in text
+        assert html is not None and "shop.example (3 items)" in html
+    assert len(mailer.to("member@example.com")) == 2
+    assert not any("shop.example" in text for _, text in mailer.to("member@example.com"))
+
+
+def test_reader_reminder_alone_sends_no_email(
+    store: Store, watch: Watch, mailer: FakeMailer
+) -> None:
+    pans(store, "shop.example")
+
+    watch.tick(MORNING + timedelta(hours=3))
+
+    assert mailer.sent == []
 
 
 def test_item_added_later_is_fetched_on_the_next_tick(
@@ -442,28 +465,3 @@ def test_failed_sold_refresh_is_retried_next_tick(store: Store, watch: Watch) ->
     failing.tick(MORNING + timedelta(hours=1))
 
     assert sold.calls == 2
-
-
-def test_reader_reminder_names_only_sites_not_reminded_before(
-    store: Store, watch: Watch, mailer: FakeMailer
-) -> None:
-    admin = store.users()[0]
-
-    def pans(site: str) -> None:
-        for n in range(3):
-            store.create_item(
-                ItemFields(
-                    name=f"Pan {n}",
-                    reference_url=f"https://{site}/{n}",
-                    watcher_ids=frozenset({admin.id}),
-                )
-            )
-
-    pans("shop.example")
-    watch.tick(MORNING + timedelta(hours=3))
-    pans("rugs.example")
-    watch.tick(MORNING + timedelta(days=1, hours=3))
-
-    [_, (_, text)] = mailer.to("admin@example.com")
-    assert "rugs.example" in text
-    assert "shop.example" not in text

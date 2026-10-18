@@ -1,0 +1,4 @@
+{% if reminders %}
+<p style="margin-top: 1.5rem; color: #6b665e"><strong>Reference-link sites worth a dedicated reader</strong></p>
+<ul style="color: #6b665e">{% for d in reminders %}<li>{{ d.domain }} ({{ d.item_count }} items)</li>{% endfor %}</ul>
+{% endif %}
