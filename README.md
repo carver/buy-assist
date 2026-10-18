@@ -42,9 +42,12 @@ Test fixture: [EXIT: The Game Advent Calendar: The Hunt for the Golden Book](htt
 
 ## Sources
 
-Listings come from BoardGameGeek GeekMarket today: active listings for items with a BGG link, in dollars and located in the US, in the item's edition when the listing names one. Every listing source sits behind one interface (`listings.py`).
+Every listing source sits behind one interface (`listings.py`).
 
-eBay comes next, through the Browse API. It searches active listings by keyword, UPC (GTIN) or EPID and quotes shipping to a zip. Claude will check each candidate against the item and drop listings like "for parts", "box only" and accessories.
+- **BoardGameGeek GeekMarket:** active listings for items with a BGG link, in dollars and located in the US, in the item's edition when the listing names one.
+- **eBay**, through the Browse API (`ebay.py`): one search per item per day, by UPC when the item has one, else EPID, else its search words. It takes Buy It Now listings and auctions located in the US that deliver to the item's ZIP, in the item's acceptable condition, and eBay quotes shipping to that ZIP. When eBay gives no cost, the USPS estimate uses the seller's ZIP prefix. An auction with a Buy It Now price counts as Buy It Now. Pure auctions show their bids and end time; they appear on the item page and in the digest, never in instant alerts, and their bids don't count toward a new low or a rank.
+
+Claude checks each eBay listing against the item the first time it's seen (`judge.py`) and rejects ones like "for parts", "box only", accessories, lots and other editions. Rejected listings never alert or reach the digest; the item page lists them under "Filtered out" with Claude's reason, so a wrong call is easy to spot. GeekMarket listings skip the check, since they're already tied to the game and edition.
 
 The Browse API doesn't return sold prices, and there's no free automated way to get them (see `docs/research/sold-prices.md`). Sold prices come from two places:
 
@@ -109,11 +112,11 @@ The scheduler (`watch.py`) ticks every hour. It fetches listings for each open i
 
 Moving to a real server should mean copying the code and the SQLite file, then adding real auth.
 
-Needs an eBay developer account for API keys.
+eBay search needs a production keyset from the eBay developer program: `EBAY_CLIENT_ID` (App ID) and `EBAY_CLIENT_SECRET` (Cert ID) in `/etc/sandbox-secrets.sh`. eBay won't activate production keys until the app either takes marketplace account deletion notices or claims the exemption; we store no eBay user data, so claim the exemption. Without the keys the app runs with GeekMarket alone and says so in its log.
 
-Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 6767. `--no-watch` serves the pages without fetching or sending email. Email needs `PURELYMAIL_ADDRESS` and `PURELYMAIL_PASSWORD` in the environment; without them the app runs and sends nothing.
+Start it with `uv run buy-assist` (`-h` for options). It keeps its database in `data/buy.db` and listens on port 6767. `--no-watch` serves the pages without fetching or sending email. Email needs `PURELYMAIL_ADDRESS` and `PURELYMAIL_PASSWORD` in the environment; without them the app runs and sends nothing. eBay search needs `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` likewise.
 
-To keep it running, `python3 install.py` installs dependencies and adds crontab entries that run `scripts/serve.sh` every 5 minutes and at boot. That script starts the app, with the credentials from `/etc/sandbox-secrets.sh`, whenever it isn't answering, and logs to `data/server.log`. `python3 install.py remove` takes the entries out.
+To keep it running, `python3 install.py` installs dependencies and adds crontab entries that run `scripts/serve.sh` every 5 minutes and at boot. That script starts the app, with the Purelymail and eBay credentials from `/etc/sandbox-secrets.sh`, whenever it isn't answering, and logs to `data/server.log`. `python3 install.py remove` takes the entries out.
 
 ## Development
 
@@ -121,7 +124,7 @@ To keep it running, `python3 install.py` installs dependencies and adds crontab 
 
 ## Build order
 
-eBay keys don't exist yet, so the parts that don't need them come first. The eBay source sits behind an interface and is tested against recorded responses until the keys arrive.
+eBay keys didn't exist at first, so the parts that don't need them came first. The eBay source is tested against a response shaped from eBay's published field names; its live test runs once the keys arrive.
 
 1. Data model, item page, add-item flow.
 2. Reference-link extraction, starting with the BoardGameGeek fixture.

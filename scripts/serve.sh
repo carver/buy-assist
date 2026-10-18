@@ -11,15 +11,19 @@ flock -n 9 || exit 0
 if curl -s -o /dev/null --max-time 3 "http://127.0.0.1:6767/static/style.css"; then
     exit 0
 fi
-# Only the Purelymail pair for alert email reaches the app: the secrets file holds other
-# credentials too, so it's read in a subshell that hands back just these two. Neither value
-# reaches the log or a command line.
-mail_credentials() {
+# Only the app's own keys reach it: the Purelymail pair for alert email and the eBay pair
+# for searches. The secrets file holds other credentials too, so it's read in a subshell
+# that hands back just these four. No value reaches the log or a command line.
+app_credentials() {
     # shellcheck disable=SC1091
     ( [ -r /etc/sandbox-secrets.sh ] && . /etc/sandbox-secrets.sh
-      printf '%s\n%s\n' "${PURELYMAIL_ADDRESS:-}" "${PURELYMAIL_PASSWORD:-}" )
+      printf '%s\n' "${PURELYMAIL_ADDRESS:-}" "${PURELYMAIL_PASSWORD:-}" \
+          "${EBAY_CLIENT_ID:-}" "${EBAY_CLIENT_SECRET:-}" )
 }
-{ IFS= read -r PURELYMAIL_ADDRESS; IFS= read -r PURELYMAIL_PASSWORD; } < <(mail_credentials)
-export PURELYMAIL_ADDRESS PURELYMAIL_PASSWORD
+{
+    IFS= read -r PURELYMAIL_ADDRESS; IFS= read -r PURELYMAIL_PASSWORD
+    IFS= read -r EBAY_CLIENT_ID; IFS= read -r EBAY_CLIENT_SECRET
+} < <(app_credentials)
+export PURELYMAIL_ADDRESS PURELYMAIL_PASSWORD EBAY_CLIENT_ID EBAY_CLIENT_SECRET
 echo "$(date -Is) starting buy-assist" >> data/server.log
 nohup uv run --frozen buy-assist >> data/server.log 2>&1 9>&- &

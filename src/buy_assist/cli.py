@@ -7,9 +7,10 @@ import httpx2
 import uvicorn
 
 from buy_assist.bgg import BggApi
+from buy_assist.ebay import EbayApi
 from buy_assist.judge import ClaudeListingJudge
 from buy_assist.links import HttpLinkReader
-from buy_assist.listings import GeekMarketListings
+from buy_assist.listings import EbayListings, GeekMarketListings, ListingSource
 from buy_assist.mailer import Mailer, MailerError, SmtpMailer
 from buy_assist.parser import ClaudeItemParser
 from buy_assist.paste import ClaudeSalesParser
@@ -40,12 +41,17 @@ def main() -> None:
     args.db.parent.mkdir(parents=True, exist_ok=True)
     client = httpx2.Client(timeout=20)
     bgg = BggApi(client)
+    sources: list[ListingSource] = [GeekMarketListings(bgg)]
+    if ebay := EbayApi.from_env(client):
+        sources.append(EbayListings(ebay))
+    else:
+        _log.warning("No eBay search: EBAY_CLIENT_ID and EBAY_CLIENT_SECRET aren't set")
     services = Services(
         parser=ClaudeItemParser(),
         links=HttpLinkReader(client, bgg),
         sold_prices=BggSoldPrices(bgg),
         sales_parser=ClaudeSalesParser(),
-        listing_sources=[GeekMarketListings(bgg)],
+        listing_sources=sources,
         judge=ClaudeListingJudge(),
         shipping=UspsQuoter(Store.open(args.db), client),
         mailer=_mailer(),
