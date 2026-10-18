@@ -2,7 +2,7 @@
 
 Finds listings for specific things our household wants to buy, often used, and helps us work out what a fair price is.
 
-Shira is the main user. Jason also tracks a few items of his own. Each item has watchers, and only watchers get its alerts.
+Multi-user system, with per-user settings. Each user can individually watch items to buy.
 
 ## What it does
 
@@ -24,7 +24,7 @@ An item has:
 - variant (size, color, edition) and acceptable condition (new, used, any)
 - shipping zip, defaulting to home (94114); a note that names a ZIP sets it
 - package weight and box size, from the BGG edition when there is one, for shipping estimates
-- watchers: Jason, Shira, or both
+- watchers: either or both
 - target price, optional, compared against the full price
 - notes, which "not this" reasons get added to
 
@@ -36,7 +36,7 @@ Most sites get the generic reader. It fetches the page (public hosts only), take
 
 BoardGameGeek has its own reader, since its pages sit behind a Cloudflare challenge. It uses the JSON API the BGG site itself calls (`api.geekdo.com`), at most one request every 5 seconds. BGG lists a game's editions, so the form offers them as a dropdown; picking one fills in that edition's title and publisher product code. BGG editions carry product codes, not UPCs. Once BGG approves our app, the reader can move to the official XML API (see `docs/research/apis.md`).
 
-The settings page counts items per reference-link domain. A domain with 3 or more items and no dedicated reader gets flagged as worth writing one; Jason's digest will carry the same reminder.
+The settings page counts items per reference-link domain. A domain with 3 or more items and no dedicated reader gets flagged as worth writing one; admin's digest will carry the same reminder.
 
 Test fixture: [EXIT: The Game Advent Calendar: The Hunt for the Golden Book](https://boardgamegeek.com/boardgame/343322/exit-the-game-advent-calendar-the-hunt-for-the-gol).
 
@@ -49,7 +49,7 @@ eBay comes next, through the Browse API. It searches active listings by keyword,
 The Browse API doesn't return sold prices, and there's no free automated way to get them (see `docs/research/sold-prices.md`). Sold prices come from two places:
 
 - BoardGameGeek GeekMarket price history, for items with a BGG link, fetched right after the item is saved and on demand from the item page. It's an undocumented JSON endpoint, so we only make small targeted lookups; every BGG call shares one throttle of one request every 5 seconds, which BGG's API wiki gives as the safe gap.
-- Pasting by hand. The item page links to eBay's sold search for the item's search words. Shira signs in, copies the results and pastes them into the page. Claude pulls out each sale and unchecks ones that don't look like the item (parts, other editions, lots); she reviews the list and saves.
+- Pasting by hand. The item page links to eBay's sold search for the item's search words. User signs in, copies the results and pastes them into the page. Claude pulls out each sale and unchecks ones that don't look like the item (parts, other editions, lots); she reviews the list and saves.
 
 A paid eBay sold-data API is the upgrade if pasting gets tedious. Each item needs one backfill when it's added, and no refresh after that, since the daily search sees new listings as they appear.
 
@@ -72,7 +72,7 @@ Full price = item price + shipping + tax.
 
 ## Alerts
 
-Email, from Jason's Purelymail account, to the item's watchers only, at the addresses set on the settings page. Once the app address is set there, every email links to the item's page.
+Email, from Purelymail account, to the item's watchers only, at the addresses set on the settings page. Once the app address is set there, every email links to the item's page.
 
 Instant alerts:
 
@@ -82,7 +82,7 @@ Instant alerts:
 
 A listing that triggers more than one alert appears once in the email, with each reason.
 
-Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Skipped when nothing is new. If the app is down at 11:30, the digest goes out when it's back, the same day only. Jason's digest also carries the reference-link reader reminder, once per site.
+Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Skipped when nothing is new. If the app is down at 11:30, the digest goes out when it's back, the same day only. The admin's digest also carries the reference-link reader reminder, once per site.
 
 Alerts are worked out from what's stored, and a log of who heard about which listing stops repeats, so an email that fails to send goes out on the next hourly tick.
 
@@ -101,7 +101,7 @@ Settings: home zip, email addresses, the app address for links, tax rate per zip
 
 ## Running it
 
-Python, FastAPI, HTMX and SQLite in one process. The process serves the pages and runs the scheduler. It runs in the dev sandbox for now, started at boot from the project's `install.py`, and Shira reaches it over Tailscale.
+Python, FastAPI, HTMX and SQLite in one process. The process serves the pages and runs the scheduler. It runs in the dev sandbox for now, started at boot from the project's `install.py`, and mobile user reaches it over Tailscale.
 
 The scheduler (`watch.py`) ticks every hour. It fetches listings for each open item whose last successful fetch is over 24 hours old (and right after an item is saved), refreshes BGG sold prices weekly, sends instant alerts, and sends the digest when it's due. Each job remembers its last success, so it catches up after the sandbox has been off. Claude calls go through `claude-json`.
 
