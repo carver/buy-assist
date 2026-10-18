@@ -1,4 +1,4 @@
-# Buy Assistant
+# Buying Assistant
 
 Finds listings for specific things our household wants to buy, often used, and helps us work out what a fair price is.
 
