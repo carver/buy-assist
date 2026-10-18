@@ -79,6 +79,7 @@ class NoticeKind(StrEnum):
     FIRST_FOUND = "first_found"
     AT_TARGET = "at_target"
     NEW_LOW = "new_low"
+    ENDING_SOON = "ending_soon"
     DIGEST = "digest"
 
 

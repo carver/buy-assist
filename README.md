@@ -45,7 +45,7 @@ Test fixture: [EXIT: The Game Advent Calendar: The Hunt for the Golden Book](htt
 Every listing source sits behind one interface (`listings.py`).
 
 - **BoardGameGeek GeekMarket:** active listings for items with a BGG link, in dollars and located in the US, in the item's edition when the listing names one.
-- **eBay**, through the Browse API (`ebay.py`): one search per item per day, by UPC when the item has one, else EPID, else its search words. It takes Buy It Now listings and auctions located in the US that deliver to the item's ZIP, in the item's acceptable condition, and eBay quotes shipping to that ZIP. When eBay gives no cost, the USPS estimate uses the seller's ZIP prefix. An auction with a Buy It Now price counts as Buy It Now. Pure auctions show their bids and end time; they appear on the item page and in the digest, never in instant alerts, and their bids don't count toward a new low or a rank.
+- **eBay**, through the Browse API (`ebay.py`): one search per item per day, by UPC when the item has one, else EPID, else its search words. It takes Buy It Now listings and auctions located in the US that deliver to the item's ZIP, in the item's acceptable condition, and eBay quotes shipping to that ZIP. When eBay gives no cost, the USPS estimate uses the seller's ZIP prefix. An auction with a Buy It Now price counts as Buy It Now. Pure auctions show their bids and end time on the item page and in the digest. Their bids don't count toward a new low or a rank, and they only alert when ending soon (see Alerts).
 
 Claude checks each eBay listing against the item the first time it's seen (`judge.py`) and rejects ones like "for parts", "box only", accessories, lots and other editions. Rejected listings never alert or reach the digest; the item page lists them under "Filtered out" with Claude's reason, so a wrong call is easy to spot. GeekMarket listings skip the check, since they're already tied to the game and edition.
 
@@ -82,10 +82,13 @@ Instant alerts:
 - the first listing found for a new item, with a note that the rest will arrive in the digest
 - any listing at or under the target price
 - a new lowest full price, once the item has at least 5 earlier data points (listings and sales)
+- an auction that would end before the person's next digest could mention it. The digest goes out at the first hourly tick from 11:30, so "before" means by 12:30.
 
 A listing that triggers more than one alert appears once in the email, with each reason.
 
-Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Skipped when nothing is new. If the app is down at 11:30, the digest goes out when it's back, the same day only.
+Daily digest at 11:30am Pacific, listing new matches per item, each ranked against everything seen for that item. Above them, under "Ending soon", it reminds of every auction that ends before the next day's digest, even ones already sent; an auction that's already over is left out entirely. Skipped when nothing is new or ending. If the app is down at 11:30, the digest goes out when it's back, the same day only.
+
+eBay bids by proxy: you enter the most you'll pay, any time before the end, and eBay bids for you up to it. So an auction reminder, by digest or alert, gives the bid that keeps the full price (shipping, plus tax on the bid) within the target, or with no target, under the cheapest Buy It Now listing. It's skipped when the current bid is already past that, and sent without a bid when there's nothing to compare. The bid is from that day's search, so the reminder says when it was checked. Each person gets one reminder per auction.
 
 Every alert and digest to the admin ends with the reference-link sites worth a reader. That footer never sends an email on its own.
 

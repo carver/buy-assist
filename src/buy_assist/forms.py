@@ -3,6 +3,7 @@
 import math
 import re
 from dataclasses import dataclass, field, fields
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from buy_assist.models import PACIFIC, Condition, ItemFields, Listing, is_upc, is_zip, optional_text
@@ -163,10 +164,15 @@ def describe_auction(listing: Listing) -> str:
     """'auction, 3 bids, ends Mon Oct 19, 8:15pm', in Pacific time; '' for Buy It Now."""
     if listing.auction_ends_at is None:
         return ""
-    ends = listing.auction_ends_at.astimezone(PACIFIC)
     bids = listing.bid_count or 0
-    when = f"{ends:%a %b %-d}, {ends:%-I:%M}{ends:%p}".replace("AM", "am").replace("PM", "pm")
-    return f"auction, {bids} bid{'' if bids == 1 else 's'}, ends {when}"
+    ends = describe_time(listing.auction_ends_at)
+    return f"auction, {bids} bid{'' if bids == 1 else 's'}, ends {ends}"
+
+
+def describe_time(when: datetime) -> str:
+    """'Mon Oct 19, 8:15pm', in Pacific time."""
+    local = when.astimezone(PACIFIC)
+    return f"{local:%a %b %-d}, {local:%-I:%M}{local:%p}".replace("AM", "am").replace("PM", "pm")
 
 
 def _is_web_url(url: str) -> bool:

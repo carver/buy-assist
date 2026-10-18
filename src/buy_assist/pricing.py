@@ -91,6 +91,10 @@ class Pricer:
             collects_tax=listing.marketplace.collects_tax,
         )
 
+    def listing_tax_rate(self, item: ItemFields, listing: Listing) -> Decimal | None:
+        """The tax a purchase of this listing pays, or None while the item's rate is unset."""
+        return self._tax_rate(item) if listing.marketplace.collects_tax else Decimal(0)
+
     def sale(self, item: ItemFields, sale: Sale) -> FullPrice:
         estimate = None if sale.shipping_cents is not None else self._quoter.quote(item, Origin())
         return full_price(

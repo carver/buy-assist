@@ -1,7 +1,13 @@
 {% from "email/_price.txt" import price_line %}{{ subject }}
 {% for entry in entries %}
 {{ entry.item.fields.name }}{% if entry.item_url %} ({{ entry.item_url }}){% endif %}
-{% for line in entry.lines %}
+{% if entry.ending %}Ending soon:
+{% for line in entry.ending %}
+- {{ line.listing.listing.title }}
+  {{ price_line(line.price) }}
+  {{ line.listing.listing.condition }} · {{ line.standing }} · {{ line.listing.listing.url }}
+{% endfor %}{% if entry.lines %}New:
+{% endif %}{% endif %}{% for line in entry.lines %}
 - {{ line.listing.listing.title }}
   {{ price_line(line.price) }}
   {{ line.listing.listing.condition }} · {{ line.standing }} · {{ line.listing.listing.url }}

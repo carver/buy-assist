@@ -1,7 +1,13 @@
 {% from "email/_price.txt" import price_line %}<div style="font-family: system-ui, sans-serif; max-width: 36rem">
 {% for entry in entries %}
 <h2 style="font-size: 1.1rem; margin: 1.25rem 0 0.5rem">{% if entry.item_url %}<a href="{{ entry.item_url }}">{{ entry.item.fields.name }}</a>{% else %}{{ entry.item.fields.name }}{% endif %}</h2>
-{% for line in entry.lines %}
+{% if entry.ending %}<p style="margin: 0 0 0.5rem"><strong>Ending soon</strong></p>
+{% for line in entry.ending %}
+<p style="margin: 0 0 0.75rem"><a href="{{ line.listing.listing.url }}">{{ line.listing.listing.title }}</a><br>
+{{ price_line(line.price) }}<br>
+<span style="color: #6b665e">{{ line.listing.listing.condition }} · {{ line.standing }}</span></p>
+{% endfor %}{% if entry.lines %}<p style="margin: 0 0 0.5rem"><strong>New</strong></p>
+{% endif %}{% endif %}{% for line in entry.lines %}
 <p style="margin: 0 0 0.75rem"><a href="{{ line.listing.listing.url }}">{{ line.listing.listing.title }}</a><br>
 {{ price_line(line.price) }}<br>
 <span style="color: #6b665e">{{ line.listing.listing.condition }} · {{ line.standing }}</span></p>

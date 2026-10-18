@@ -71,6 +71,14 @@ class FullPrice:
         return self.shipping_cents is not None and self.tax_cents is not None
 
 
+def max_bid_cents(limit_cents: int, shipping_cents: int, tax_rate: Decimal) -> int:
+    """The highest bid whose full price, with tax on the bid, stays within the limit."""
+    bid = int((limit_cents - shipping_cents) / (1 + tax_rate)) + 1
+    while bid + shipping_cents + round(bid * tax_rate) > limit_cents:
+        bid -= 1
+    return bid
+
+
 def full_price(
     item_cents: int,
     shipping_cents: int | None,

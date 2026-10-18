@@ -651,3 +651,123 @@ def test_auction_bids_dont_count_toward_a_new_low(
     watch.tick(MORNING)
 
     assert [s for s, _ in mailer.to("member@example.com")] == ["New low price: EXIT calendar"]
+
+
+def auction(external_id: str, dollars: int, ends: datetime) -> Listing:
+    return replace(ebay_listing(external_id, dollars), auction_ends_at=ends, bid_count=3)
+
+
+def test_digest_reminds_of_auctions_ending_before_the_next_one(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store, target_dollars=60)
+    ebay.shown = [auction("1", 12, datetime(2026, 10, 19, 3, 15, tzinfo=UTC))]
+
+    watch.tick(MORNING + timedelta(hours=3))
+    watch.tick(MORNING + timedelta(days=1, hours=3))  # refetched, then the digest
+    watch.tick(MORNING + timedelta(days=1, hours=5))
+
+    sent = mailer.to("member@example.com")
+    assert [subject for subject, _ in sent] == [
+        "Buy Assistant digest: 1 new listing",
+        "Buy Assistant digest: 1 auction ending soon",
+    ]
+    text = sent[1][1]
+    assert "Ending soon" in text
+    assert "auction, 3 bids, ends Sun Oct 18, 8:15pm, bid checked Sun Oct 18, 12:00pm" in text
+    assert "Bid up to about $46.03 to stay within your $60.00 target." in text
+
+
+def test_new_auction_ending_soon_is_in_the_digest_once(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store)
+    ebay.shown = [auction("1", 12, datetime(2026, 10, 18, 3, tzinfo=UTC))]
+
+    watch.tick(MORNING + timedelta(hours=3))
+
+    [(subject, text)] = mailer.to("member@example.com")
+    assert subject == "Buy Assistant digest: 1 auction ending soon"
+    assert text.count("EXIT calendar #1") == 1
+
+
+def test_auction_ending_before_the_next_digest_alerts_at_once(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    item_id = calendar(store)
+    buy_now = [ebay_listing("1", 45), ebay_listing("2", 50)]
+    ebay.shown = buy_now
+    watch.tick(MORNING + timedelta(hours=3))  # first found, then the digest
+    mailer.sent.clear()
+    tonight = auction("3", 12, datetime(2026, 10, 18, 3, tzinfo=UTC))
+    store.record_listings(
+        item_id, Marketplace.EBAY, [*buy_now, tonight], MORNING + timedelta(hours=4)
+    )
+
+    watch.tick(MORNING + timedelta(hours=5))
+
+    [(subject, text)] = mailer.to("member@example.com")
+    assert subject == "Auction ending soon: EXIT calendar"
+    assert "ends Sat Oct 17, 8:00pm, bid checked Sat Oct 17, 1:00pm" in text
+    assert "Bid up to about $44.99 to beat the cheapest Buy It Now, $58.88 all-in." in text
+
+
+def test_auction_with_nothing_to_compare_alerts_without_a_bid(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store)
+    ebay.shown = [auction("1", 12, datetime(2026, 10, 17, 17, 30, tzinfo=UTC))]
+
+    watch.tick(MORNING)
+
+    [(subject, text)] = mailer.to("member@example.com")
+    assert subject == "Auction ending soon: EXIT calendar"
+    assert "Bid up to" not in text
+
+
+def test_auction_already_over_target_isnt_worth_a_reminder(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store, target_dollars=20)
+    ebay.shown = [auction("1", 30, datetime(2026, 10, 17, 17, 30, tzinfo=UTC))]
+
+    watch.tick(MORNING)
+
+    assert mailer.sent == []
+
+
+def test_auction_ending_in_the_hour_after_1130_alerts_before_the_digest(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store)
+    ebay.shown = [auction("1", 12, datetime(2026, 10, 17, 18, 45, tzinfo=UTC))]
+
+    watch.tick(MORNING + timedelta(hours=2))  # 11:00 Pacific; the digest may come after 11:45
+
+    assert [s for s, _ in mailer.to("member@example.com")] == ["Auction ending soon: EXIT calendar"]
+
+
+def test_digest_leaves_out_auctions_past_their_end(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store, target_dollars=5)
+    ebay.shown = [auction("1", 12, datetime(2026, 10, 17, 18, 45, tzinfo=UTC))]
+    watch.tick(MORNING + timedelta(hours=2))
+
+    watch.tick(MORNING + timedelta(hours=3))  # 12:00 Pacific, still in the morning's search
+
+    assert mailer.sent == []
