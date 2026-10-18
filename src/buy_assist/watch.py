@@ -297,6 +297,8 @@ class Watch:
         template: str,
         context: dict[str, object],
     ) -> bool:
+        """Send one email. Every email gets `reminders` for its footer (see
+        email/_footer.*), so each template must include that footer."""
         context = {**context, "reminders": self._reminders(recipient.user)}
         text = _EMAIL_TEMPLATES.get_template(f"email/{template}.txt").render(context)
         html = _EMAIL_TEMPLATES.get_template(f"email/{template}.html").render(context)
