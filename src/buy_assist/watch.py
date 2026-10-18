@@ -13,17 +13,16 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from statistics import median
-from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from buy_assist.claude import ParseError
 from buy_assist.domains import ReferenceDomain, reference_domains
-from buy_assist.forms import format_dollars
+from buy_assist.forms import describe_auction, format_dollars
 from buy_assist.judge import ListingJudge
 from buy_assist.listings import ListingError, ListingSource
 from buy_assist.mailer import Mailer, MailerError
-from buy_assist.models import Item, Listing, NoticeKind, RecordedListing, User
+from buy_assist.models import PACIFIC, Item, Listing, NoticeKind, RecordedListing, User
 from buy_assist.prices import FullPrice
 from buy_assist.pricing import Pricer, ShippingQuoter
 from buy_assist.sold import SoldPriceError, SoldPriceSource
@@ -31,7 +30,6 @@ from buy_assist.store import Store
 
 _log = logging.getLogger(__name__)
 
-PACIFIC = ZoneInfo("America/Los_Angeles")
 DIGEST_TIME = time(11, 30)
 FETCH_EVERY = timedelta(hours=24)
 SOLD_REFRESH_EVERY = timedelta(days=7)
@@ -166,10 +164,12 @@ class Watch:
         return tried == 0 or failed < tried
 
     def _priced(self, item: Item) -> list[_Priced]:
-        """Every listing ever seen for the item, priced in full, cheapest first."""
+        """Every listing ever seen for the item that Claude didn't reject, priced in full,
+        cheapest first."""
         priced = [
             _Priced(r, self._pricer.listing(item.fields, r.listing))
             for r in self._store.listings(item.id, include_ended=True)
+            if r.rejection is None
         ]
         return sorted(priced, key=lambda p: p.price.total_cents)
 
@@ -208,9 +208,11 @@ class Watch:
         now: datetime,
     ) -> list[_Reason]:
         """Why this person should hear about the item's listings now. A price with unknown
-        shipping or tax can't be at target or a new low: it's only a lower bound."""
+        shipping or tax can't be at target or a new low: it's only a lower bound. Nor can an
+        auction's bid, which will rise; auctions wait for the digest."""
         noticed = {p.listing.id: self._store.noticed(p.listing.id, user.id) for p in priced}
-        active = [p for p in priced if p.listing.ended_at is None]
+        buy_now = [p for p in priced if not p.listing.listing.is_auction]
+        active = [p for p in buy_now if p.listing.ended_at is None]
         reasons: list[_Reason] = []
         first_seen = min(p.listing.first_seen for p in priced)
         if active and now - first_seen <= FIRST_FOUND_WINDOW and not any(noticed.values()):
@@ -227,7 +229,7 @@ class Watch:
                 reasons.append(_Reason(NoticeKind.AT_TARGET, p.listing, p.price))
             earlier = [
                 q.price.total_cents
-                for q in priced
+                for q in buy_now
                 if q.listing.first_seen < p.listing.first_seen and q.price.complete
             ] + sale_totals
             if (
@@ -268,9 +270,13 @@ class Watch:
             if user.id not in item.fields.watcher_ids:
                 continue
             priced = self._priced(item)
-            totals = [p.price.total_cents for p in priced]
+            totals = [p.price.total_cents for p in priced if not p.listing.listing.is_auction]
             lines = [
-                _DigestLine(p.listing, p.price, _rank(p.price.total_cents, totals))
+                _DigestLine(
+                    p.listing,
+                    p.price,
+                    describe_auction(p.listing.listing) or _rank(p.price.total_cents, totals),
+                )
                 for p in priced
                 if p.listing.ended_at is None and not self._store.noticed(p.listing.id, user.id)
             ]

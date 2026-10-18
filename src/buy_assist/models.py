@@ -5,6 +5,10 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+"""The household's time zone, for the digest and for times shown to people."""
 
 _ZIP = re.compile(r"\d{5}")
 _UPC = re.compile(r"\d{8,14}")

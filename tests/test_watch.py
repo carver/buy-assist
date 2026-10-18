@@ -590,3 +590,64 @@ def test_failed_judging_retries_ebay_without_refetching_geekmarket(
     watch.tick(MORNING + timedelta(hours=1))
 
     assert (source.calls, ebay.calls) == (1, 2)
+
+
+def ebay_watch(store: Store, ebay: FakeListings, judge: FakeJudge, mailer: FakeMailer) -> Watch:
+    return Watch(
+        store,
+        listing_sources=[ebay],
+        judge=judge,
+        sold_prices=FakeSold(),
+        shipping=FakeQuoter(),
+        mailer=mailer,
+    )
+
+
+def test_rejected_listings_never_reach_email(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store, target_dollars=60)
+    ebay.shown = [ebay_listing("1", 5), ebay_listing("2", 45)]
+    judge.rejecting = {"1": "Box only"}
+
+    watch.tick(MORNING)
+    watch.tick(MORNING + timedelta(hours=3))
+
+    texts = "\n".join(text for _, text in mailer.to("member@example.com"))
+    assert "#2" in texts
+    assert "#1" not in texts
+
+
+def test_auctions_go_in_the_digest_only(store: Store, judge: FakeJudge, mailer: FakeMailer) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    calendar(store, target_dollars=60)
+    ends = datetime(2026, 10, 20, 3, 15, tzinfo=UTC)
+    ebay.shown = [replace(ebay_listing("1", 12), auction_ends_at=ends, bid_count=3)]
+
+    watch.tick(MORNING)
+    assert mailer.sent == []
+    watch.tick(MORNING + timedelta(hours=3))
+
+    [(subject, text)] = mailer.to("member@example.com")
+    assert subject == "Buy Assistant digest: 1 new listing"
+    assert "auction, 3 bids, ends Mon Oct 19, 8:15pm" in text
+
+
+def test_auction_bids_dont_count_toward_a_new_low(
+    store: Store, judge: FakeJudge, mailer: FakeMailer
+) -> None:
+    ebay = FakeEbayListings()
+    watch = ebay_watch(store, ebay, judge, mailer)
+    item_id = calendar(store)
+    ends = datetime(2026, 10, 30, tzinfo=UTC)
+    bids = [replace(ebay_listing(f"a{n}", 10), auction_ends_at=ends, bid_count=1) for n in range(3)]
+    earlier = [ebay_listing(f"b{n}", 50) for n in range(5)]
+    store.record_listings(item_id, Marketplace.EBAY, [*bids, *earlier], MORNING - timedelta(days=5))
+    ebay.shown = [*bids, *earlier, ebay_listing("1", 40)]
+
+    watch.tick(MORNING)
+
+    assert [s for s, _ in mailer.to("member@example.com")] == ["New low price: EXIT calendar"]
